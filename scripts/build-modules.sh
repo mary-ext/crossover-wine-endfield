@@ -23,15 +23,10 @@ WINE_SRC="$BUILD_DIR/wine-src"          # extracted sources/wine
 WINE_BUILD="$BUILD_DIR/wine-build64"    # out-of-tree 64-bit build
 PKG_NAME="endfield-wine-modules"
 BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
-# Command Line Tools 27+ ship arm64-only binaries: the /usr/bin/clang xcrun shim can't load
-# libxcrun.dylib under `arch -x86_64`. So call the real (native) clang directly, targeting x86_64,
-# with an explicit SDK. The resulting binaries are x86_64, run under Rosetta, so configure is not
-# cross-compiling.
-CLT_BIN="$(xcode-select -p)/usr/bin"; [ -x "$CLT_BIN/clang" ] || CLT_BIN="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/bin"
-SDK="${SDKROOT:-$(xcrun --show-sdk-path)}"
-TOOLCHAIN_ENV='export PATH="'"$CLT_BIN"':$PATH" SDKROOT="'"$SDK"'" MACOSX_DEPLOYMENT_TARGET=10.15'
+export MACOSX_DEPLOYMENT_TARGET=10.15
 
 log(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+use_bison(){ export PATH="$("$BREW" --prefix bison)/bin:$PATH"; }  # Wine needs bison >= 3.0; macOS ships 2.3
 
 cmd_deps() {
   log "Installing Homebrew build dependencies"
@@ -71,20 +66,20 @@ cmd_configure() {
   log "Configuring 64-bit-only Wine"
   [ -d "$WINE_SRC" ] || { echo "run 'fetch' first"; exit 1; }
   rm -rf "$WINE_BUILD"; mkdir -p "$WINE_BUILD"
-  # CrossOver on Apple Silicon builds as x86_64 under Rosetta. Run configure+make under
-  # `arch -x86_64` so __x86_64__ is defined for the unix objects. Homebrew libs are arm64-only,
-  # so the optional externals are disabled; CrossOver already provides them at runtime.
-  arch -x86_64 /bin/bash -c '
-    '"$TOOLCHAIN_ENV"'
-    export PATH="'"$("$BREW" --prefix bison)"'/bin:$PATH"
-    echo "host arch: $(uname -m); bison: $(bison --version | head -1); sdk: $SDKROOT"
-    cd "'"$WINE_BUILD"'"
-    CC="clang -arch x86_64" CXX="clang++ -arch x86_64" "'"$WINE_SRC"'/configure" --enable-archs=x86_64 --disable-tests --without-x \
-      --without-freetype --without-gnutls --without-sdl --without-vulkan --without-krb5 \
-      --without-gstreamer --without-gphoto --without-sane --without-pcap --without-usb \
+  use_bison
+  # CrossOver's Wine is x86_64 and runs under Rosetta. The shell and tools stay native; only the
+  # compiler targets x86_64. Declaring build = host = x86_64 keeps configure out of cross-compiling
+  # mode (its x86_64 test programs just run under Rosetta). Running configure under `arch -x86_64`
+  # instead is far slower in CI, since every sh/sed/grep it spawns is translated too.
+  # Homebrew libs are arm64-only, so optional externals are disabled; none of them are compiled
+  # into the three modules we build.
+  ( cd "$WINE_BUILD" && CC="clang -arch x86_64" CXX="clang++ -arch x86_64" OBJC="clang -arch x86_64" "$WINE_SRC/configure" \
+      --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-archs=x86_64 \
+      --disable-tests --without-x --without-freetype --without-gnutls --without-sdl --without-vulkan \
+      --without-krb5 --without-gstreamer --without-gphoto --without-sane --without-pcap --without-usb \
       --without-cups --without-coreaudio
-  ' 2>&1 | tee "$BUILD_DIR/configure.log"
-  [ -f "$WINE_BUILD/Makefile" ] || { echo "configure failed — see $BUILD_DIR/configure.log"; exit 1; }
+  ) 2>&1 | tee "$BUILD_DIR/configure.log"
+  [ "${PIPESTATUS[0]}" = 0 ] || { echo "configure failed — see $BUILD_DIR/configure.log"; exit 1; }
   # CrossOver's win32u/vulkan.c uses SONAME_LIBVULKAN even with --without-vulkan; define it so it
   # compiles (dlopen fails gracefully at runtime).
   local cfg="$WINE_BUILD/include/config.h"
@@ -98,12 +93,10 @@ cmd_build() {
   [ "${FULL:-0}" = "1" ] && targets=""
   log "Building ${targets:-the full tree} (make -j$JOBS)"
   [ -f "$WINE_BUILD/Makefile" ] || { echo "run 'configure' first"; exit 1; }
-  arch -x86_64 /bin/bash -c '
-    '"$TOOLCHAIN_ENV"'; export PATH="'"$("$BREW" --prefix bison)"'/bin:$PATH"
-    cd "'"$WINE_BUILD"'" && make -j'"$JOBS"' '"$targets"'
-  ' 2>&1 | tee "$BUILD_DIR/build.log"
-  local rc=${PIPESTATUS[0]}
-  [ "$rc" = 0 ] || { echo "make failed (exit $rc) — see $BUILD_DIR/build.log"; exit "$rc"; }
+  use_bison
+  # shellcheck disable=SC2086 # targets is a word list
+  ( cd "$WINE_BUILD" && make -j"$JOBS" $targets ) 2>&1 | tee "$BUILD_DIR/build.log"
+  [ "${PIPESTATUS[0]}" = 0 ] || { echo "make failed — see $BUILD_DIR/build.log"; exit 1; }
 }
 
 cmd_package() {

@@ -25,12 +25,25 @@ permissions:
 
 env:
   CX_VER: ${{ inputs.cx_version || '26.3.0' }}
+  # Releases are published from this runner's build.
+  RELEASE_RUNNER: macos-26
 
 jobs:
   build:
-    # Apple Silicon runner; the modules are x86_64 and configure runs test binaries under Rosetta.
-    runs-on: macos-26
+    name: build (${{ matrix.runner }})
+    # Apple Silicon runners; the modules are x86_64 and configure runs test binaries under Rosetta.
+    runs-on: ${{ matrix.runner }}
+    # xcode-27 (macOS 27 + Xcode 27 beta) is a preview image; don't let it block releases.
+    continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            experimental: false
+          - runner: xcode-27
+            experimental: true
     steps:
       - uses: actions/checkout@v7
 
@@ -63,7 +76,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: endfield-wine-modules-cx${{ env.CX_VER }}
+          name: endfield-wine-modules-cx${{ env.CX_VER }}-${{ matrix.runner }}
           path: |
             dist/endfield-wine-modules.tar.gz
             dist/endfield-wine-modules.tar.gz.sha256
@@ -73,7 +86,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: build-logs-cx${{ env.CX_VER }}
+          name: build-logs-cx${{ env.CX_VER }}-${{ matrix.runner }}
           path: |
             build/configure.log
             build/build.log
@@ -89,7 +102,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: endfield-wine-modules-cx${{ env.CX_VER }}
+          name: endfield-wine-modules-cx${{ env.CX_VER }}-${{ env.RELEASE_RUNNER }}
           path: dist
 
       - name: Publish release
