@@ -24,8 +24,8 @@ SOFTWARE.
 SCOPE OF THIS MIT LICENSE
 
 This MIT license covers ONLY the original tooling authored by this project:
-the build/install/debug scripts under scripts/ and the documentation under
-docs/ and README files.
+the build/install scripts under scripts/, the CI workflow under .github/, and
+the README files.
 
 It does NOT cover the contents of patches/, which are modifications to Wine
 (https://www.winehq.org/) and are therefore licensed under the GNU Lesser

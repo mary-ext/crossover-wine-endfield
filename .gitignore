@@ -2,10 +2,9 @@
 .idea
 .claude
 
-# Build artifacts (the Wine source tree + build output; users build these themselves)
+# Build output (Wine source tree, build tree, packaged modules)
 /build/
-/patcher-app/build/
-/patcher-app/.build/
+/dist/
 
 # Logs
 *.log
@@ -13,7 +12,3 @@
 # macOS cruft
 .DS_Store
 **/.DS_Store
-
-# Scratch / debug captures
-/scratch/
-*.tmp

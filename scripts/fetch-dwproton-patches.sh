@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# fetch-dwproton-patches.sh — pull the Endfield-relevant dw-proton Wine patches (STAGE 2).
-#
-# These patch Wine to satisfy ACE's *later* init stage (missing ntoskrnl exports, KiUser*Dispatcher
-# tpshell detection, timing). They do NOT fix our macOS STAGE 1 blocker (the EndfieldBase.dll
-# execute-fault loop) — see docs/11-linux-vs-macos-comparison.md. We stage them because any Wine
-# rebuild for stage 1 will also want them, and stage 2 is next once stage 1 is cleared.
+# fetch-dwproton-patches.sh — pull the Endfield-relevant dw-proton Wine patches into
+# patches/stage2-dwproton (missing ntoskrnl exports, KiUser*Dispatcher spoof, timing).
 #
 # Source: dawn-winery/dwproton-mirror at the fix commit b816be489 (GE issue #433). dawn.wine itself
 # is behind an Anubis anti-bot wall; the GitHub mirror shares the same git objects.
