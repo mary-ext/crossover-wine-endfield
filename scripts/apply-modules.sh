@@ -145,5 +145,5 @@ cat <<EOF
 Created $DEST_APP
 
 Open the app. If macOS blocks it, choose "Open Anyway" in System Settings -> Privacy & Security.
-If Vulkan causes rendering issues, select DirectX 11 in the game launcher's graphics settings.
+Enable MSync in the bottle's advanced settings.
 EOF
