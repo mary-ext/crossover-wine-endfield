@@ -1,0 +1,261 @@
+diff --git a/dlls/ntdll/unix/thread.c b/dlls/ntdll/unix/thread.c
+index f1324c7..4611738 100644
+--- a/dlls/ntdll/unix/thread.c
++++ b/dlls/ntdll/unix/thread.c
+@@ -35,6 +35,8 @@
+ #include <pthread.h>
+ #include <signal.h>
+ #include <sys/types.h>
++#include <sys/stat.h>
++#include <time.h>
+ #include <unistd.h>
+ #include <sys/mman.h>
+ #ifdef HAVE_SCHED_H
+@@ -1323,6 +1325,9 @@ static NTSTATUS update_attr_list( PS_ATTRIBUTE_LIST *attr, HANDLE thread, const
+ /***********************************************************************
+  *              NtCreateThread   (NTDLL.@)
+  */
++static int gcdiag_ms(void);
++static void WINAPIV gcdiag_write( const char *fmt, ... );
++
+ NTSTATUS WINAPI NtCreateThread( HANDLE *handle, ACCESS_MASK access, OBJECT_ATTRIBUTES *attr,
+                                 HANDLE process, CLIENT_ID *id, CONTEXT *ctx, INITIAL_TEB *teb,
+                                 BOOLEAN suspended )
+@@ -1452,6 +1457,9 @@ NTSTATUS WINAPI GPT_IMPORT(NtCreateThreadEx)( HANDLE *handle, ACCESS_MASK access
+     thread_data->start = start;
+     thread_data->param = param;
+ 
++    gcdiag_write( "GCDIAG create_thread t=%d tid=%04x new_tid=%04x start=%p param=%p flags=%#x\n", gcdiag_ms(),
++                  (int)HandleToULong( NtCurrentTeb()->ClientId.UniqueThread ), (int)tid, start, param, (int)flags );
++
+     pthread_attr_init( &pthread_attr );
+     pthread_attr_setstack( &pthread_attr, thread_data->kernel_stack, kernel_stack_size );
+     pthread_attr_setguardsize( &pthread_attr, 0 );
+@@ -1493,11 +1501,82 @@ GPT_ABI_WRAPPER( NtCreateThreadEx );
+ 
+ #endif
+ 
++/* Diagnostics for Unity's "SuspendThread loop failed". */
++static LONG gcdiag_fd = -2;  /* -2: undecided, -1: disabled */
++
++static int gcdiag_ms(void)
++{
++    LARGE_INTEGER now;
++    NtQueryPerformanceCounter( &now, NULL );
++    return (int)(now.QuadPart / 10000);
++}
++
++/* Return -2 to retry once the image name is available. */
++static int gcdiag_open(void)
++{
++    const RTL_USER_PROCESS_PARAMETERS *params = NtCurrentTeb()->Peb->ProcessParameters;
++    const char *want = getenv( "WINE_GCDIAG_IMAGE" ), *home = getenv( "HOME" );
++    char path[PATH_MAX], header[256];
++    const WCHAR *image;
++    size_t want_len, len, i;
++    int fd;
++
++    if (!want) want = "Endfield.exe";
++    if (!params || !params->ImagePathName.Buffer) return -2;
++    if (!home) return -1;
++
++    image = params->ImagePathName.Buffer;
++    len = params->ImagePathName.Length / sizeof(WCHAR);
++    want_len = strlen( want );
++    if (len < want_len || (len > want_len && image[len - want_len - 1] != '\\')) return -1;
++    for (i = 0; i < want_len; i++)
++    {
++        WCHAR c = image[len - want_len + i];
++        unsigned char w = want[i];
++        if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
++        if (w >= 'A' && w <= 'Z') w += 'a' - 'A';
++        if (c != w) return -1;
++    }
++
++    snprintf( path, sizeof(path), "%s/Library/Logs/Endfield-gcdiag", home );
++    mkdir( path, 0755 );
++    snprintf( path, sizeof(path), "%s/Library/Logs/Endfield-gcdiag/gcdiag-%ld-%d.log",
++              home, (long)time( NULL ), (int)getpid() );
++    if ((fd = open( path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644 )) < 0) return -1;
++    len = snprintf( header, sizeof(header), "GCDIAG log pid=%d time=%ld t=%d image=%s\n",
++                    (int)getpid(), (long)time( NULL ), gcdiag_ms(), want );
++    write( fd, header, min( len, sizeof(header) - 1 ));
++    return fd;
++}
++
++static void WINAPIV gcdiag_write( const char *fmt, ... )
++{
++    char buf[512];
++    va_list args;
++    int len, fd = gcdiag_fd;
++
++    if (fd == -2)
++    {
++        int new_fd = gcdiag_open();
++        if (new_fd == -2) return;
++        if ((fd = InterlockedCompareExchange( &gcdiag_fd, new_fd, -2 )) == -2) fd = new_fd;
++        else if (new_fd >= 0) close( new_fd );
++    }
++    if (fd < 0) return;
++
++    va_start( args, fmt );
++    len = vsnprintf( buf, sizeof(buf), fmt, args );
++    va_end( args );
++    if (len > 0) write( fd, buf, min( len, (int)sizeof(buf) - 1 ));
++}
++
+ /***********************************************************************
+  *           abort_thread
+  */
+ void abort_thread( int status )
+ {
++    gcdiag_write( "GCDIAG abort_thread t=%d tid=%04x status=%#x\n", gcdiag_ms(),
++                  (int)HandleToULong( NtCurrentTeb()->ClientId.UniqueThread ), status );
+     pthread_sigmask( SIG_BLOCK, &server_block_set, NULL );
+     if (InterlockedDecrement( &nb_threads ) <= 0) abort_process( status );
+     pthread_exit_wrapper( status );
+@@ -1521,6 +1600,8 @@ static DECLSPEC_NORETURN void exit_thread( int status )
+     static void *prev_teb;
+     TEB *teb;
+ 
++    gcdiag_write( "GCDIAG exit_thread t=%d tid=%04x status=%#x\n", gcdiag_ms(),
++                  (int)HandleToULong( NtCurrentTeb()->ClientId.UniqueThread ), status );
+     pthread_sigmask( SIG_BLOCK, &server_block_set, NULL );
+ 
+     if (InterlockedDecrement( &nb_threads ) <= 0) exit_process( status );
+@@ -1688,8 +1769,49 @@ NTSTATUS WINAPI NtOpenThread( HANDLE *handle, ACCESS_MASK access,
+ /******************************************************************************
+  *              NtSuspendThread   (NTDLL.@)
+  */
++/* Log the first 64 events per counter, then powers of two. */
++static void WINAPIV gcdiag_log( LONG *counter, const char *op, HANDLE handle, const char *fmt, ... )
++{
++    LONG n = InterlockedIncrement( counter );
++    char buf[256];
++    va_list args;
++
++    if (n > 64 && (n & (n - 1))) return;
++    va_start( args, fmt );
++    vsnprintf( buf, sizeof(buf), fmt, args );
++    va_end( args );
++    gcdiag_write( "GCDIAG %s #%d t=%d tid=%04x target=%p %s\n", op, (int)n, gcdiag_ms(),
++                  (int)HandleToULong( NtCurrentTeb()->ClientId.UniqueThread ), handle, buf );
++}
++
++static void gcdiag_thread_details( HANDLE handle )
++{
++    OBJECT_BASIC_INFORMATION obj = {0};
++    THREAD_BASIC_INFORMATION tbi = {0};
++    struct { THREAD_NAME_INFORMATION info; WCHAR buf[128]; } tn;
++    char name[129] = "";
++    NTSTATUS obj_status, tbi_status, name_status;
++    int i, len;
++
++    obj_status = NtQueryObject( handle, ObjectBasicInformation, &obj, sizeof(obj), NULL );
++    tbi_status = NtQueryInformationThread( handle, ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
++    name_status = NtQueryInformationThread( handle, ThreadNameInformation, &tn, sizeof(tn), NULL );
++    if (!name_status)
++    {
++        len = min( tn.info.ThreadName.Length / sizeof(WCHAR), sizeof(name) - 1 );
++        for (i = 0; i < len; i++) name[i] = tn.info.ThreadName.Buffer[i] < 0x80 ? tn.info.ThreadName.Buffer[i] : '?';
++        name[len] = 0;
++    }
++    gcdiag_write( "GCDIAG suspend-detail target=%p obj_status=%#x access=%#x handles=%u "
++                  "tbi_status=%#x exit=%#x tid=%04x name_status=%#x name='%s'\n",
++                  handle, (int)obj_status, (int)obj.GrantedAccess, (int)obj.HandleCount,
++                  (int)tbi_status, (int)tbi.ExitStatus, (int)HandleToULong( tbi.ClientId.UniqueThread ),
++                  (int)name_status, name );
++}
++
+ NTSTATUS WINAPI NtSuspendThread( HANDLE handle, ULONG *count )
+ {
++    static LONG diag_count;
+     unsigned int ret;
+ 
+     SERVER_START_REQ( suspend_thread )
+@@ -1701,6 +1823,12 @@ NTSTATUS WINAPI NtSuspendThread( HANDLE handle, ULONG *count )
+         }
+     }
+     SERVER_END_REQ;
++    if (ret)
++    {
++        static LONG detail_count;
++        gcdiag_log( &diag_count, "suspend", handle, "status=%#x", ret );
++        if (InterlockedIncrement( &detail_count ) <= 3) gcdiag_thread_details( handle );
++    }
+     return ret;
+ }
+ 
+@@ -1710,6 +1838,7 @@ NTSTATUS WINAPI NtSuspendThread( HANDLE handle, ULONG *count )
+  */
+ NTSTATUS WINAPI NtResumeThread( HANDLE handle, ULONG *count )
+ {
++    static LONG diag_count;
+     unsigned int ret;
+ 
+     SERVER_START_REQ( resume_thread )
+@@ -1721,6 +1850,7 @@ NTSTATUS WINAPI NtResumeThread( HANDLE handle, ULONG *count )
+         }
+     }
+     SERVER_END_REQ;
++    if (ret) gcdiag_log( &diag_count, "resume", handle, "status=%#x", ret );
+     return ret;
+ }
+ 
+@@ -1752,6 +1882,14 @@ NTSTATUS WINAPI NtTerminateThread( HANDLE handle, LONG exit_code )
+ {
+     unsigned int ret;
+     BOOL self;
++    THREAD_BASIC_INFORMATION target = {0};
++
++    if (handle != GetCurrentThread()
++        && !NtQueryInformationThread( handle, ThreadBasicInformation, &target, sizeof(target), NULL )
++        && target.ClientId.UniqueThread != NtCurrentTeb()->ClientId.UniqueThread)
++        gcdiag_write( "GCDIAG terminate_other t=%d tid=%04x target_tid=%04x exit_code=%#x\n", gcdiag_ms(),
++                      (int)HandleToULong( NtCurrentTeb()->ClientId.UniqueThread ),
++                      (int)HandleToULong( target.ClientId.UniqueThread ), exit_code );
+ 
+     SERVER_START_REQ( terminate_thread )
+     {
+@@ -1861,6 +1999,7 @@ NTSTATUS set_thread_context( HANDLE handle, const void *context, BOOL *self, USH
+  */
+ NTSTATUS get_thread_context( HANDLE handle, void *context, BOOL *self, USHORT machine )
+ {
++    static LONG diag_first_count, diag_second_count;
+     unsigned int ret;
+     HANDLE context_handle;
+     struct context_data server_contexts[2];
+@@ -1881,11 +2020,19 @@ NTSTATUS get_thread_context( HANDLE handle, void *context, BOOL *self, USHORT ma
+     }
+     SERVER_END_REQ;
+ 
++    if (ret && ret != STATUS_PENDING)
++        gcdiag_log( &diag_first_count, "get_context", handle, "first=%#x", ret );
++
+     if (ret == STATUS_PENDING)
+     {
+         sigset_t sigset;
++        LARGE_INTEGER t0, t1;
++        NTSTATUS wait_status;
++        HANDLE pending_handle = context_handle;
+ 
+-        NtWaitForSingleObject( context_handle, FALSE, NULL );
++        NtQueryPerformanceCounter( &t0, NULL );
++        wait_status = NtWaitForSingleObject( context_handle, FALSE, NULL );
++        NtQueryPerformanceCounter( &t1, NULL );
+ 
+         server_enter_uninterrupted_section( &fd_cache_mutex, &sigset );
+ 
+@@ -1905,6 +2052,12 @@ NTSTATUS get_thread_context( HANDLE handle, void *context, BOOL *self, USHORT ma
+         SERVER_END_REQ;
+ 
+         server_leave_uninterrupted_section( &fd_cache_mutex, &sigset );
++
++        if (ret || wait_status)
++            gcdiag_log( &diag_second_count, "get_context", handle,
++                        "wait=%#x wait_ms=%d context_handle=%p second=%#x count=%u",
++                        (int)wait_status, (int)((t1.QuadPart - t0.QuadPart) / 10000),
++                        pending_handle, ret, count );
+     }
+     if (!ret && count)
+     {

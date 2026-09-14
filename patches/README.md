@@ -20,6 +20,10 @@ Endfield patches from dw-proton commit `b816be489` in [dawn-winery/dwproton-mirr
 - `0002-ntdll-bound-select-timeouts-in-NtDelayExecution.patch`, after `misc/0011`, in `dlls/ntdll/unix/sync.c`:
   - Caps `select()` waits at one day to avoid busy-looping on Darwin's `EINVAL` for timeouts over 10^8 seconds.
   - Waits indefinitely if a relative deadline would overflow, including for `INT64_MIN` timeouts.
+- `0003-DEBUG-ntdll-log-thread-suspend-and-lifecycle-events.patch` (diagnostics branch only), in `dlls/ntdll/unix/thread.c`:
+  - Diagnoses Unity's intermittent "Fatal error in GC: SuspendThread loop failed" during world loading.
+  - Logs thread creation, exit, abort, cross-thread termination, and suspend/resume/context failures. Includes target details for the first three suspend failures.
+  - Logs to `~/Library/Logs/Endfield-gcdiag/gcdiag-<time>-<pid>.log` for the executable named by `WINE_GCDIAG_IMAGE` (default `Endfield.exe`).
 
 ## License
 
