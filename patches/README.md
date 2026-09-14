@@ -1,6 +1,6 @@
 # patches/
 
-Applied to CrossOver's Wine 11.0 source by `scripts/build-modules.sh apply`, in this order: `stage2-dwproton/em-backports/*` → `stage2-dwproton/misc/*` → `stage1-macos/0000` → `stage1-macos/0001`.
+Applied to CrossOver's Wine 11.0 source by `scripts/build-modules.sh apply`, in this order: `stage2-dwproton/em-backports/*` → `stage2-dwproton/misc/*` → `stage1-macos/*`.
 
 ## `stage2-dwproton/`
 
@@ -17,6 +17,9 @@ Endfield patches from dw-proton commit `b816be489` in [dawn-winery/dwproton-mirr
   - Skips `0F 1F` multi-byte NOPs in the game's protector that Rosetta 2 reports as illegal instructions.
   - Delivers `EXCEPTION_PRIV_INSTRUCTION` for privileged instructions such as `mov reg, cr3`, which Rosetta reports as invalid opcodes.
 - `0000-build-fix-win32u-vulkan-soname-fallback.patch`: defines `SONAME_LIBVULKAN` for builds without Vulkan.
+- `0002-ntdll-bound-select-timeouts-in-NtDelayExecution.patch`, after `misc/0011`, in `dlls/ntdll/unix/sync.c`:
+  - Caps `select()` waits at one day to avoid busy-looping on Darwin's `EINVAL` for timeouts over 10^8 seconds.
+  - Waits indefinitely if a relative deadline would overflow, including for `INT64_MIN` timeouts.
 
 ## License
 

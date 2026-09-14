@@ -52,7 +52,7 @@ cmd_apply() {
     n=0
     for f in $(ls "$P"/stage2-dwproton/em-backports/*.patch | sort) \
              $(ls "$P"/stage2-dwproton/misc/*.patch | sort) \
-             "$P"/stage1-macos/0000-*.patch "$P"/stage1-macos/0001-*.patch; do
+             $(ls "$P"/stage1-macos/*.patch | sort); do
       git apply "$f" || { echo "patch failed: $f"; exit 1; }
       n=$((n+1))
     done

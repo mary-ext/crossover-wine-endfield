@@ -1,0 +1,58 @@
+diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -2563,6 +2563,20 @@
+ #else
+     return STATUS_NO_YIELD_PERFORMED;
+ #endif
++}
++
++
++/* Darwin rejects select() timeouts over 10^8 seconds with EINVAL.
++ * Attempt one bounded wait; return TRUE if the caller must recompute the remaining time. */
++static BOOL select_max_timeout( timeout_t diff_us, struct timeval *tv )
++{
++    static const time_t max_sec = 86400;
++
++    if (diff_us / 1000000 < max_sec) return FALSE;
++    tv->tv_sec = max_sec;
++    tv->tv_usec = 0;
++    select( 0, NULL, NULL, NULL, tv );
++    return TRUE;
+ }
+ 
+ 
+@@ -2589,11 +2603,15 @@
+     }
+     else if (timeout->QuadPart < 0)
+     {
+-        timeout_t when = -timeout->QuadPart, diff;
++        timeout_t when = -(timeout->QuadPart + 1), diff;  /* duration - 1 avoids negating INT64_MIN */
+         LARGE_INTEGER now;
+ 
+         NtQueryPerformanceCounter( &now, NULL );
+-        when += now.QuadPart;
++        if (when >= TIMEOUT_INFINITE - now.QuadPart)  /* unrepresentable deadline */
++        {
++            for (;;) select( 0, NULL, NULL, NULL, NULL );
++        }
++        when += now.QuadPart + 1;
+ 
+         NtYieldExecution();
+ 
+@@ -2603,6 +2621,7 @@
+             NtQueryPerformanceCounter( &now, NULL );
+             diff = (when - now.QuadPart + 9) / 10;
+             if (diff <= 0) break;
++            if (select_max_timeout( diff, &tv )) continue;
+             tv.tv_sec = diff / 1000000;
+             tv.tv_usec = diff % 1000000;
+             if (select( 0, NULL, NULL, NULL, &tv ) != -1) break;
+@@ -2624,6 +2643,7 @@
+             NtQuerySystemTime( &now );
+             diff = (when - now.QuadPart + 9) / 10;
+             if (diff <= 0) break;
++            if (select_max_timeout( diff, &tv )) continue;
+             tv.tv_sec  = diff / 1000000;
+             tv.tv_usec = diff % 1000000;
+             if (select( 0, NULL, NULL, NULL, &tv ) != -1) break;
