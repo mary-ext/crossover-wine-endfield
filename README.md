@@ -28,7 +28,7 @@ Run a single step with `./scripts/build-modules.sh <step>`: `deps`, `fetch`, `ap
 ## After installing
 
 - If macOS blocks the first launch, open **System Settings → Privacy & Security → Open Anyway**.
-- If DirectX 12 or Vulkan causes rendering issues, select **DirectX 11** in the game launcher's graphics settings. Game updates can reset this setting.
+- If Vulkan causes rendering issues, select **DirectX 11** in the game launcher's graphics settings.
 - To update D3DMetal from Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/), pass its disk image to `install-release.sh` or `apply-modules.sh`:
 
   ```bash
