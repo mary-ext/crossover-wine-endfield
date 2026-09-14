@@ -35,7 +35,11 @@ The steps can also be run individually: `deps`, `fetch`, `apply`, `configure`, `
 
 - **First launch:** macOS blocks the copy because its signature was modified. Open **System Settings → Privacy & Security** and click **Open Anyway**.
 - **Set the game's renderer to DirectX 11** in the launcher's graphics settings. Vulkan and DirectX 12 give a white screen. Game updates can reset this.
-- **Optional:** to use D3DMetal from Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/) instead of the version bundled with CrossOver, pass its libraries when applying: `GPTK_DIR="/Volumes/<GPTK>/redist/lib/external" ./scripts/apply-modules.sh`.
+- **Optional:** to use a newer D3DMetal from Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/) than the one bundled with CrossOver, pass the downloaded disk image to either install script:
+
+  ```bash
+  GPTK=~/Downloads/Evaluation_environment_for_Windows_games_4.0_beta_2.dmg ./scripts/install-release.sh
+  ```
 
 ## CI and releases
 
