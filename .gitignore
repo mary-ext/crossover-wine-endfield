@@ -2,13 +2,12 @@
 .idea
 .claude
 
-# Build output (Wine source tree, build tree, packaged modules)
+# Downloaded source, builds and packages
 /build/
 /dist/
 
-# Logs
 *.log
 
-# macOS cruft
+# macOS
 .DS_Store
 **/.DS_Store

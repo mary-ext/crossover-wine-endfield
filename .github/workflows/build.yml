@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       cx_version:
-        description: "CrossOver source version to build against (e.g. 26.3.0)"
+        description: "CrossOver source version (e.g. 26.3.0)"
         required: true
         default: "26.3.0"
 
@@ -28,7 +28,7 @@ env:
 
 jobs:
   build:
-    # macOS 27 on Apple Silicon; the modules are x86_64 and configure runs test binaries under Rosetta.
+    # Apple Silicon runner; configure runs x86_64 probes under Rosetta.
     runs-on: xcode-27
     timeout-minutes: 60
     steps:

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# install-release.sh — download prebuilt Endfield Wine modules from a GitHub release, verify them,
-# and apply them to a copy of CrossOver with apply-modules.sh.
+# Download and verify Endfield Wine modules, then install with apply-modules.sh.
 #
 # Usage:  scripts/install-release.sh
 # Env:
 #   REPO      GitHub repository to download from (default mary-ext/crossover-wine-endfield)
 #   TAG       release tag (default: the latest release)
 #   BASE_URL  download from this URL instead of GitHub (expects the same asset names)
-#   plus everything apply-modules.sh accepts: SRC_APP, DEST_APP, GPTK, FORCE
+#   SRC_APP, DEST_APP, GPTK, FORCE: see apply-modules.sh
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

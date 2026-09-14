@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# build-modules.sh — build the patched Wine modules (ntdll.so, kernel32.dll, ntoskrnl.exe) from
-# CrossOver's Wine source and package them for apply-modules.sh / install-release.sh.
+# Build and package patched ntdll.so, kernel32.dll and ntoskrnl.exe from CrossOver's Wine source.
 #
-# Endfield is 64-bit only, so this configures a minimal 64-bit-only Wine with the standard
-# toolchain (no win32on64 / cx-llvm) and builds just the three modules we swap into CrossOver.
+# Endfield is 64-bit only; no win32on64 or cx-llvm toolchain is needed.
 #
 # Usage:
 #   scripts/build-modules.sh [all]    # deps -> fetch -> apply -> configure -> build -> package
@@ -30,7 +28,6 @@ use_bison(){ export PATH="$("$BREW" --prefix bison)/bin:$PATH"; }  # Wine needs 
 
 cmd_deps() {
   log "Installing Homebrew build dependencies"
-  # Only what the minimal configure below needs (all optional libs are --without-*).
   "$BREW" install bison mingw-w64 pkgconf || exit 1
 }
 
@@ -42,13 +39,13 @@ cmd_fetch() {
   rm -rf "$WINE_SRC" "$BUILD_DIR/sources"; mkdir -p "$WINE_SRC"
   tar xzf "$tgz" -C "$BUILD_DIR" sources/wine || { echo "extract failed"; exit 1; }
   mv "$BUILD_DIR/sources/wine"/* "$WINE_SRC/"; rm -rf "$BUILD_DIR/sources"
-  # git-init the tree so patches apply with `git apply` and can be diffed
+  # Commit a baseline for inspecting patch changes.
   ( cd "$WINE_SRC" && git init -q && git add -A && git -c user.email=build@localhost -c user.name=build commit -qm "vanilla CrossOver ${CX_VER} wine" ) || exit 1
-  echo "wine source ready at: $WINE_SRC ($(cat "$WINE_SRC/VERSION"))"
+  echo "Wine source: $WINE_SRC ($(cat "$WINE_SRC/VERSION"))"
 }
 
 cmd_apply() {
-  log "Applying patches (em-backports -> misc -> macos Rosetta fixes)"
+  log "Applying patches (em-backports -> misc -> macOS)"
   [ -d "$WINE_SRC/.git" ] || { echo "run 'fetch' first"; exit 1; }
   local P="$REPO/patches"
   ( cd "$WINE_SRC"
@@ -56,10 +53,10 @@ cmd_apply() {
     for f in $(ls "$P"/stage2-dwproton/em-backports/*.patch | sort) \
              $(ls "$P"/stage2-dwproton/misc/*.patch | sort) \
              "$P"/stage1-macos/0000-*.patch "$P"/stage1-macos/0001-*.patch; do
-      git apply "$f" || { echo "FAILED to apply: $f"; exit 1; }
+      git apply "$f" || { echo "patch failed: $f"; exit 1; }
       n=$((n+1))
     done
-    echo "applied $n patches cleanly" ) || exit 1
+    echo "applied $n patches" ) || exit 1
 }
 
 cmd_configure() {
@@ -67,12 +64,8 @@ cmd_configure() {
   [ -d "$WINE_SRC" ] || { echo "run 'fetch' first"; exit 1; }
   rm -rf "$WINE_BUILD"; mkdir -p "$WINE_BUILD"
   use_bison
-  # CrossOver's Wine is x86_64 and runs under Rosetta. The shell and tools stay native; only the
-  # compiler targets x86_64. Declaring build = host = x86_64 keeps configure out of cross-compiling
-  # mode (its x86_64 test programs just run under Rosetta). Running configure under `arch -x86_64`
-  # instead is far slower in CI, since every sh/sed/grep it spawns is translated too.
-  # Homebrew libs are arm64-only, so optional externals are disabled; none of them are compiled
-  # into the three modules we build.
+  # Matching build/host lets configure run x86_64 probes under Rosetta while shell tools
+  # stay native. Disable optional libraries: Homebrew's are arm64, and these modules don't need them.
   ( cd "$WINE_BUILD" && CC="clang -arch x86_64" CXX="clang++ -arch x86_64" OBJC="clang -arch x86_64" "$WINE_SRC/configure" \
       --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-archs=x86_64 \
       --disable-tests --without-x --without-freetype --without-gnutls --without-sdl --without-vulkan \
@@ -80,15 +73,13 @@ cmd_configure() {
       --without-cups --without-coreaudio
   ) 2>&1 | tee "$BUILD_DIR/configure.log"
   [ "${PIPESTATUS[0]}" = 0 ] || { echo "configure failed — see $BUILD_DIR/configure.log"; exit 1; }
-  # CrossOver's win32u/vulkan.c uses SONAME_LIBVULKAN even with --without-vulkan; define it so it
-  # compiles (dlopen fails gracefully at runtime).
+  # Supply library names used by win32u even with --without-vulkan.
   local cfg="$WINE_BUILD/include/config.h"
   sed -i '' 's|/\* #undef SONAME_LIBVULKAN \*/|#define SONAME_LIBVULKAN "libvulkan.1.dylib"|' "$cfg"
   sed -i '' 's|/\* #undef SONAME_LIBMOLTENVK \*/|#define SONAME_LIBMOLTENVK "libMoltenVK.dylib"|' "$cfg"
 }
 
 cmd_build() {
-  # make pulls in the tools, headers and import libs these three need.
   local targets="dlls/ntdll/ntdll.so dlls/kernel32/x86_64-windows/kernel32.dll dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe"
   [ "${FULL:-0}" = "1" ] && targets=""
   log "Building ${targets:-the full tree} (make -j$JOBS)"
@@ -107,9 +98,8 @@ cmd_package() {
   cp "$B/dlls/ntdll/ntdll.so" \
      "$B/dlls/kernel32/x86_64-windows/kernel32.dll" \
      "$B/dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe" "$out/" || exit 1
-  # CrossOver's ntdll dlopens cxcompatdb.so, which resolves @rpath/libgnutls through ntdll.so's own
-  # LC_RPATH. CodeWeavers' ntdll carries @loader_path/../../../lib64; without it D3DMetal never
-  # engages. Added here so installing needs no developer tools.
+  # cxcompatdb.so needs ntdll's LC_RPATH to resolve @rpath/libgnutls and enable D3DMetal.
+  # Add CrossOver's library path here so installation needs no developer tools.
   install_name_tool -add_rpath "@loader_path/../../../lib64" "$out/ntdll.so" || exit 1
   cp "$WINE_SRC/COPYING.LIB" "$out/"
   echo "$CX_VER" > "$out/CROSSOVER_VERSION"
@@ -119,7 +109,7 @@ cmd_package() {
   commit="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
   git -C "$REPO" diff --quiet HEAD -- patches scripts 2>/dev/null || commit="$commit (with uncommitted changes)"
   cat > "$out/SOURCE.txt" <<EOF
-These modules are Wine, licensed LGPL-2.1-or-later (see COPYING.LIB). Built from:
+Wine modules: LGPL-2.1-or-later (see COPYING.LIB).
 
   CrossOver $CX_VER source: $SRC_URL
   patches and build script: $repo_url

@@ -2,15 +2,14 @@ diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
 index 91926a8..e6f434e 100644
 --- a/dlls/ntdll/unix/signal_x86_64.c
 +++ b/dlls/ntdll/unix/signal_x86_64.c
-@@ -1990,6 +1990,31 @@ static inline BOOL handle_cet_nop( ucontext_t *sigcontext, CONTEXT *context )
+@@ -1990,6 +1990,30 @@ static inline BOOL handle_cet_nop( ucontext_t *sigcontext, CONTEXT *context )
              RIP_sig(sigcontext) += prefix_count + 3;
              TRACE_(seh)( "skipped RDSSPD/RDSSPQ instruction\n" );
              return TRUE;
 +        case 0x1F:
-+            /* Endfield_FineWine stage-1 fix: multi-byte NOP (0F 1F /0). Rosetta 2 wrongly raises
-+               an illegal-instruction fault on some forms (observed: the register form 0F 1F C1
-+               = "nop ecx", used by the Endfield/TenProtect VMProtect layer). It is a NOP with no
-+               side effects, so decode its length and skip past it. */
++            /* Rosetta 2 faults on some multi-byte NOPs (0F 1F /0), including
++               0F 1F C1 (nop ecx) in Endfield's TenProtect/VMProtect layer.
++               Decode the instruction length and skip it. */
 +        {
 +            unsigned int p = i + 2;                 /* index of the modrm byte */
 +            BYTE modrm; unsigned int mod, rm;
@@ -34,18 +33,16 @@ index 91926a8..e6f434e 100644
          }
          break;
      default:
-@@ -2518,6 +2543,21 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+@@ -2518,6 +2542,19 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
          if (handle_cet_nop( ucontext, &context.c )) return;
          /* CW HACK 23427 */
          if (emulate_xgetbv( ucontext, &context.c )) return;
-+        /* Endfield_FineWine stage-2 fix: Rosetta reports privileged instructions (e.g. mov reg,cr3
-+           in ACE-BASE.sys) as invalid-opcode faults instead of #GP, so Wine would hand the app an
-+           EXCEPTION_ILLEGAL_INSTRUCTION where on Linux (#GP) it gets EXCEPTION_PRIV_INSTRUCTION.
-+           Deliver the privileged-instruction exception here too, so the anti-cheat's own SEH handler
-+           processes it the same way it does on Linux (fixes ACE "driver error 13"). */
++        /* Rosetta reports privileged instructions (e.g. mov reg,cr3 in ACE-BASE.sys)
++           as invalid opcodes rather than #GP. ACE's SEH handler expects
++           EXCEPTION_PRIV_INSTRUCTION; the wrong exception causes "driver error 13". */
 +        rec.ExceptionCode = is_privileged_instr( &context.c );
 +        if (rec.ExceptionCode) break;
-+        {   /* instrumentation: log any remaining genuinely-unknown illegal instruction */
++        {   /* Log unhandled illegal instructions. */
 +            BYTE _ib[16];
 +            unsigned int _il = virtual_uninterrupted_read_memory( (BYTE *)RIP_sig(ucontext), _ib, sizeof(_ib) );
 +            ERR( "CWC-ILLEGAL-INSTR rip=%p len=%u bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
