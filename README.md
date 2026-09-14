@@ -2,8 +2,6 @@
 
 Patched Wine modules for running Arknights: Endfield in CrossOver on Apple Silicon.
 
-Builds `ntdll.so`, `kernel32.dll` and `ntoskrnl.exe` from CrossOver's Wine source with [dw-proton](https://dawn.wine/) anti-cheat patches and Rosetta 2 signal-handling fixes, then installs them into a copy of CrossOver.
-
 Forked from [stoicswe/Endfield_FineWine](https://github.com/stoicswe/Endfield_FineWine).
 
 ## Install prebuilt modules
