@@ -10,7 +10,7 @@ Forked from [stoicswe/Endfield_FineWine](https://github.com/stoicswe/Endfield_Fi
 ./scripts/install-release.sh
 ```
 
-Downloads the latest [release](https://github.com/mary-ext/crossover-wine-endfield/releases), verifies its checksum and creates `/Applications/CrossOver_Endfield_Patch.app`, preserving the original app. Set `TAG=<tag>` to select a release.
+Downloads the latest [release](https://github.com/mary-ext/crossover-wine-endfield/releases), verifies its checksum and creates `/Applications/CrossOver_Endfield_Patch.app`, preserving the original app.
 
 ## Build from source
 
@@ -19,31 +19,26 @@ Requires Xcode and Homebrew. If `xcode-select` points at the Command Line Tools,
 ```bash
 ./scripts/build-wine.sh       # Wine modules -> build/wine-out
 ./scripts/build-moltenvk.sh   # libMoltenVK.dylib -> build/moltenvk-out
-./scripts/package.sh         # both builds -> dist/
-./scripts/apply-modules.sh   # install into a copy of CrossOver
+./scripts/package.sh          # both builds -> dist/
+./scripts/apply-modules.sh    # install into a copy of CrossOver
 ```
 
-The builds can run independently. To run a single step:
+Pass a step name to run only that step:
 
-- `./scripts/build-wine.sh <step>`: `deps`, `fetch`, `apply`, `configure`, `build`.
+- `./scripts/build-wine.sh <step>`: `deps`, `fetch`, `apply`, `configure`, `build`
   - `deps` installs bison, mingw-w64 and pkgconf.
-- `./scripts/build-moltenvk.sh <step>`: `fetch`, `apply`, `deps`, `build`.
-
-`CX_VER` selects the CrossOver source version (default `26.3.0`). `MVK_TAG` selects the MoltenVK release (default `v1.4.2`, the patch target).
+  - `CX_VER=<version>`: selects the CrossOver source version.
+- `./scripts/build-moltenvk.sh <step>`: `fetch`, `apply`, `deps`, `build`
+  - `MVK_TAG=<tag>`: selects the MoltenVK release.
 
 ## After installing
 
 - If macOS blocks the first launch, open **System Settings → Privacy & Security → Open Anyway**.
 - Enable **MSync** in the bottle's advanced settings.
-- To update D3DMetal from Apple's [Game Porting Toolkit](https://developer.apple.com/games/game-porting-toolkit/), pass its disk image to `install-release.sh` or `apply-modules.sh`:
-
-  ```bash
-  GPTK=~/Downloads/Evaluation_environment_for_Windows_games_4.0_beta_2.dmg ./scripts/install-release.sh
-  ```
 
 ## Patches
 
-See [patches/README.md](patches/README.md).
+See the [patch reference](patches/README.md) for application order, individual fixes and upstream sources.
 
 ## License
 
@@ -51,5 +46,7 @@ See [patches/README.md](patches/README.md).
 - Wine patches (`patches/wine/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license.
   - The dwproton patches retain upstream authorship; upstream provides no separate patch license.
 - MoltenVK patches (`patches/moltenvk/`) and the built library: Apache-2.0, MoltenVK's license.
+
+## Disclaimer
 
 Not affiliated with CodeWeavers, Gryphline/Hypergryph, Tencent, or Apple. Running the game in an unsupported configuration may violate its terms of service.
