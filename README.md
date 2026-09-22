@@ -1,6 +1,6 @@
 # crossover-wine-endfield
 
-Patched Wine modules for running Arknights: Endfield in CrossOver on Apple Silicon.
+Patched Wine modules and MoltenVK for running Arknights: Endfield in CrossOver on Apple Silicon.
 
 Forked from [stoicswe/Endfield_FineWine](https://github.com/stoicswe/Endfield_FineWine).
 
@@ -14,14 +14,22 @@ Downloads the latest [release](https://github.com/mary-ext/crossover-wine-endfie
 
 ## Build from source
 
-Requires Xcode Command Line Tools and Homebrew.
+Requires Xcode and Homebrew. If `xcode-select` points at the Command Line Tools, set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 
 ```bash
-./scripts/build-modules.sh    # installs bison, mingw-w64, pkgconf; builds in build/, packages into dist/
-./scripts/apply-modules.sh    # creates the patched CrossOver copy from dist/endfield-wine-modules
+./scripts/build-wine.sh       # Wine modules -> build/wine-out
+./scripts/build-moltenvk.sh   # libMoltenVK.dylib -> build/moltenvk-out
+./scripts/package.sh         # both builds -> dist/
+./scripts/apply-modules.sh   # install into a copy of CrossOver
 ```
 
-Run a single step with `./scripts/build-modules.sh <step>`: `deps`, `fetch`, `apply`, `configure`, `build`, or `package`. Set `CX_VER` to select the CrossOver source version (default `26.3.0`).
+The builds can run independently. To run a single step:
+
+- `./scripts/build-wine.sh <step>`: `deps`, `fetch`, `apply`, `configure`, `build`.
+  - `deps` installs bison, mingw-w64 and pkgconf.
+- `./scripts/build-moltenvk.sh <step>`: `fetch`, `apply`, `deps`, `build`.
+
+`CX_VER` selects the CrossOver source version (default `26.3.0`). `MVK_TAG` selects the MoltenVK release (default `v1.4.2`, the patch target).
 
 ## After installing
 
@@ -33,10 +41,6 @@ Run a single step with `./scripts/build-modules.sh <step>`: `deps`, `fetch`, `ap
   GPTK=~/Downloads/Evaluation_environment_for_Windows_games_4.0_beta_2.dmg ./scripts/install-release.sh
   ```
 
-## CI and releases
-
-[The build workflow](.github/workflows/build.yml) runs on relevant changes to `main` and pull requests, `v*` tags, or manual dispatch. It uploads the module archive and checksum as artifacts. Tags also publish these files as a GitHub release for `install-release.sh`.
-
 ## Patches
 
 See [patches/README.md](patches/README.md).
@@ -44,7 +48,7 @@ See [patches/README.md](patches/README.md).
 ## License
 
 - `scripts/` and this README: [MIT](LICENSE).
-- `patches/` and the built modules: LGPL-2.1-or-later, Wine's license. The dw-proton patches keep their upstream authorship.
-- This repository does not include CrossOver, Apple's GPTK, or the game.
+- Wine patches (`patches/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license. The dw-proton patches keep their upstream authorship.
+- MoltenVK patches (`patches/moltenvk/`) and the built library: Apache-2.0, MoltenVK's license.
 
 Not affiliated with CodeWeavers, Gryphline/Hypergryph, Tencent, or Apple. Running the game in an unsupported configuration may violate its terms of service.

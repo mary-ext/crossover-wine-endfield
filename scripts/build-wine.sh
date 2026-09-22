@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Build and package patched ntdll.so, kernel32.dll and ntoskrnl.exe from CrossOver's Wine source.
+# Build patched Wine modules from CrossOver's Wine source into build/wine-out.
 #
 # Endfield is 64-bit only; no win32on64 or cx-llvm toolchain is needed.
 #
 # Usage:
-#   scripts/build-modules.sh [all]    # deps -> fetch -> apply -> configure -> build -> package
-#   scripts/build-modules.sh <step>   # deps | fetch | apply | configure | build | package
+#   scripts/build-wine.sh [all]    # deps -> fetch -> apply -> configure -> build
+#   scripts/build-wine.sh <step>   # deps | fetch | apply | configure | build
 #
-# Env: CX_VER (default 26.3.0), BUILD_DIR (default <repo>/build), DIST_DIR (default <repo>/dist),
+# Env: CX_VER (default 26.3.0), BUILD_DIR (default <repo>/build),
 #      JOBS (default: all cores), FULL=1 (build the whole Wine tree instead of the three modules)
 
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 CX_VER="${CX_VER:-26.3.0}"
 BUILD_DIR="${BUILD_DIR:-$REPO/build}"
-DIST_DIR="${DIST_DIR:-$REPO/dist}"
 JOBS="${JOBS:-$(sysctl -n hw.ncpu)}"
 SRC_URL="https://media.codeweavers.com/pub/crossover/source/crossover-sources-${CX_VER}.tar.gz"
 WINE_SRC="$BUILD_DIR/wine-src"          # extracted sources/wine
 WINE_BUILD="$BUILD_DIR/wine-build64"    # out-of-tree 64-bit build
-PKG_NAME="endfield-wine-modules"
+WINE_OUT="$BUILD_DIR/wine-out"
+MODULES="dlls/ntdll/ntdll.so dlls/kernel32/x86_64-windows/kernel32.dll dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe"
 BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
 export MACOSX_DEPLOYMENT_TARGET=10.15
 
@@ -80,7 +80,7 @@ cmd_configure() {
 }
 
 cmd_build() {
-  local targets="dlls/ntdll/ntdll.so dlls/kernel32/x86_64-windows/kernel32.dll dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe"
+  local targets="$MODULES" m
   [ "${FULL:-0}" = "1" ] && targets=""
   log "Building ${targets:-the full tree} (make -j$JOBS)"
   [ -f "$WINE_BUILD/Makefile" ] || { echo "run 'configure' first"; exit 1; }
@@ -88,41 +88,16 @@ cmd_build() {
   # shellcheck disable=SC2086 # targets is a word list
   ( cd "$WINE_BUILD" && make -j"$JOBS" $targets ) 2>&1 | tee "$BUILD_DIR/build.log"
   [ "${PIPESTATUS[0]}" = 0 ] || { echo "make failed — see $BUILD_DIR/build.log"; exit 1; }
-}
-
-cmd_package() {
-  local out="$DIST_DIR/$PKG_NAME" B="$WINE_BUILD"
-  log "Packaging into $out.tar.gz"
-  [ -f "$B/dlls/ntdll/ntdll.so" ] || { echo "run 'build' first"; exit 1; }
-  rm -rf "$out" "$out.tar.gz" "$out.tar.gz.sha256"; mkdir -p "$out"
-  cp "$B/dlls/ntdll/ntdll.so" \
-     "$B/dlls/kernel32/x86_64-windows/kernel32.dll" \
-     "$B/dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe" "$out/" || exit 1
-  # cxcompatdb.so needs ntdll's LC_RPATH to resolve @rpath/libgnutls and enable D3DMetal.
-  # Add CrossOver's library path here so installation needs no developer tools.
-  install_name_tool -add_rpath "@loader_path/../../../lib64" "$out/ntdll.so" || exit 1
-  cp "$WINE_SRC/COPYING.LIB" "$out/"
-  echo "$CX_VER" > "$out/CROSSOVER_VERSION"
-  local repo_url commit
-  if [ -n "${GITHUB_REPOSITORY:-}" ]; then repo_url="${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY"
-  else repo_url="$(git -C "$REPO" config --get remote.origin.url || echo unknown)"; fi
-  commit="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
-  git -C "$REPO" diff --quiet HEAD -- patches scripts 2>/dev/null || commit="$commit (with uncommitted changes)"
-  cat > "$out/SOURCE.txt" <<EOF
-Wine modules: LGPL-2.1-or-later (see COPYING.LIB).
-
-  CrossOver $CX_VER source: $SRC_URL
-  patches and build script: $repo_url
-  commit:                   $commit
-EOF
-  ( cd "$out" && shasum -a 256 ntdll.so kernel32.dll ntoskrnl.exe > SHA256SUMS && cat SHA256SUMS )
-  COPYFILE_DISABLE=1 tar -czf "$out.tar.gz" -C "$DIST_DIR" "$PKG_NAME" || exit 1
-  ( cd "$DIST_DIR" && shasum -a 256 "$PKG_NAME.tar.gz" > "$PKG_NAME.tar.gz.sha256" )
-  echo "packaged: $out.tar.gz"
+  rm -rf "$WINE_OUT"; mkdir -p "$WINE_OUT"
+  for m in $MODULES; do cp "$WINE_BUILD/$m" "$WINE_OUT/" || exit 1; done
+  cp "$WINE_SRC/COPYING.LIB" "$WINE_OUT/" || exit 1
+  echo "$CX_VER" > "$WINE_OUT/CROSSOVER_VERSION"
+  echo "$SRC_URL" > "$WINE_OUT/SOURCE_URL"
+  echo "built $WINE_OUT"
 }
 
 case "${1:-all}" in
-  deps|fetch|apply|configure|build|package) "cmd_$1" ;;
-  all) cmd_deps; cmd_fetch; cmd_apply; cmd_configure; cmd_build; cmd_package ;;
-  *) echo "usage: $0 [all|deps|fetch|apply|configure|build|package]"; exit 1 ;;
+  deps|fetch|apply|configure|build) "cmd_$1" ;;
+  all) cmd_deps; cmd_fetch; cmd_apply; cmd_configure; cmd_build ;;
+  *) echo "usage: $0 [all|deps|fetch|apply|configure|build]"; exit 1 ;;
 esac

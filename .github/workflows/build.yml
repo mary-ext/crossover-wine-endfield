@@ -6,12 +6,16 @@ on:
     tags: ["v*"]
     paths:
       - "patches/**"
-      - "scripts/build-modules.sh"
+      - "scripts/build-wine.sh"
+      - "scripts/build-moltenvk.sh"
+      - "scripts/package.sh"
       - ".github/workflows/build.yml"
   pull_request:
     paths:
       - "patches/**"
-      - "scripts/build-modules.sh"
+      - "scripts/build-wine.sh"
+      - "scripts/build-moltenvk.sh"
+      - "scripts/package.sh"
       - ".github/workflows/build.yml"
   workflow_dispatch:
     inputs:
@@ -27,39 +31,144 @@ env:
   CX_VER: ${{ inputs.cx_version || '26.3.0' }}
 
 jobs:
-  build:
+  wine:
     # Apple Silicon runner; configure runs x86_64 probes under Rosetta.
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
+      - name: Identify toolchain
+        id: toolchain
+        run: |
+          hash=$({ sw_vers; xcodebuild -version; clang --version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Wine build
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: build/wine-out
+          key: wine-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-cx${{ env.CX_VER }}-${{ hashFiles('patches/stage1-macos/**', 'patches/stage2-dwproton/**', 'scripts/build-wine.sh', '.github/workflows/build.yml') }}
+
       - name: Install Rosetta 2
+        if: steps.cache.outputs.cache-hit != 'true'
         run: /usr/sbin/softwareupdate --install-rosetta --agree-to-license
 
       - name: Install build dependencies
-        run: ./scripts/build-modules.sh deps
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-wine.sh deps
 
       - name: Cache CrossOver source archive
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache@v6
         with:
           path: build/crossover-sources-${{ env.CX_VER }}.tar.gz
           key: crossover-sources-${{ env.CX_VER }}
 
       - name: Fetch Wine source
-        run: ./scripts/build-modules.sh fetch
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-wine.sh fetch
 
       - name: Apply patches
-        run: ./scripts/build-modules.sh apply
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-wine.sh apply
 
       - name: Configure
-        run: ./scripts/build-modules.sh configure
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-wine.sh configure
 
       - name: Build
-        run: ./scripts/build-modules.sh build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-wine.sh build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wine-out
+          path: build/wine-out
+          if-no-files-found: error
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wine-logs-cx${{ env.CX_VER }}
+          path: |
+            build/configure.log
+            build/build.log
+            build/wine-build64/config.log
+          if-no-files-found: ignore
+
+  moltenvk:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Identify toolchain
+        id: toolchain
+        run: |
+          hash=$({ sw_vers; xcodebuild -version; clang --version; } | shasum -a 256 | cut -d ' ' -f 1)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Cache MoltenVK build
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: build/moltenvk-out
+          key: moltenvk-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('patches/moltenvk/**', 'scripts/build-moltenvk.sh', '.github/workflows/build.yml') }}
+
+      - name: Fetch MoltenVK source
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-moltenvk.sh fetch
+
+      - name: Apply patches
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-moltenvk.sh apply
+
+      - name: Build dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-moltenvk.sh deps
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-moltenvk.sh build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: moltenvk-out
+          path: build/moltenvk-out
+          if-no-files-found: error
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: moltenvk-logs
+          path: |
+            build/moltenvk-deps.log
+            build/moltenvk-build.log
+          if-no-files-found: ignore
+
+  package:
+    needs: [wine, moltenvk]
+    runs-on: xcode-27
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: wine-out
+          path: build/wine-out
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: moltenvk-out
+          path: build/moltenvk-out
 
       - name: Package
-        run: ./scripts/build-modules.sh package
+        run: ./scripts/package.sh
 
       - uses: actions/upload-artifact@v7
         with:
@@ -69,20 +178,9 @@ jobs:
             dist/endfield-wine-modules.tar.gz.sha256
           if-no-files-found: error
 
-      - name: Upload logs
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-logs-cx${{ env.CX_VER }}
-          path: |
-            build/configure.log
-            build/build.log
-            build/wine-build64/config.log
-          if-no-files-found: ignore
-
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write

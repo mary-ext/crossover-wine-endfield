@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install packaged Endfield Wine modules into a copy of CrossOver.
+# Install packaged Wine modules and MoltenVK into a copy of CrossOver.
 #
 # Usage:  scripts/apply-modules.sh [MODULES_DIR]    (default: dist/endfield-wine-modules)
 # Env:
@@ -7,8 +7,6 @@
 #   DEST_APP  patched copy to create, replacing any existing one (default /Applications/CrossOver_Endfield_Patch.app)
 #   GPTK      Apple Game Porting Toolkit to take D3DMetal from (optional): its .dmg, the mounted
 #             volume, or its redist/lib/external directory
-#   MOLTENVK  path to MoltenVK-macos.tar or libMoltenVK.dylib; 0 keeps CrossOver's version
-#             (default: download v1.4.2 for the 1x1 Vulkan drawable fix)
 #   FORCE=1   apply even if the modules were built for a different CrossOver version
 
 set -euo pipefail
@@ -17,23 +15,19 @@ MODULES="${1:-$REPO/dist/endfield-wine-modules}"
 SRC_APP="${SRC_APP:-/Applications/CrossOver.app}"
 DEST_APP="${DEST_APP:-/Applications/CrossOver_Endfield_Patch.app}"
 GPTK="${GPTK:-}"
-MOLTENVK="${MOLTENVK:-}"
-MOLTENVK_URL="https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar"
-MOLTENVK_SHA256="f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e"
 log(){  printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 ok(){   printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 die(){  printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
-gptk_mnt=""; mvk_work=""
+gptk_mnt=""
 cleanup(){
   [ -z "$gptk_mnt" ] || { hdiutil detach "$gptk_mnt" -quiet 2>/dev/null || true; rmdir "$gptk_mnt" 2>/dev/null || true; }
-  [ -z "$mvk_work" ] || rm -rf "$mvk_work"
 }
 trap cleanup EXIT
 
 log "Checking modules in $MODULES"
-for f in ntdll.so kernel32.dll ntoskrnl.exe CROSSOVER_VERSION SHA256SUMS; do
-  [ -f "$MODULES/$f" ] || die "$MODULES/$f not found — run scripts/build-modules.sh or scripts/install-release.sh"
+for f in ntdll.so kernel32.dll ntoskrnl.exe libMoltenVK.dylib CROSSOVER_VERSION SHA256SUMS; do
+  [ -f "$MODULES/$f" ] || die "$MODULES/$f not found — run scripts/install-release.sh or follow README.md's source build steps"
 done
 ( cd "$MODULES" && shasum -a 256 -c -s SHA256SUMS ) || die "checksum mismatch in $MODULES"
 ok "checksums match"
@@ -68,34 +62,15 @@ if [ -n "$GPTK" ]; then
 fi
 
 mvk_version(){ LC_ALL=C tr '\0' '\n' < "$1" | LC_ALL=C awk '!v && /^[0-9]+\.[0-9]+\.[0-9]+$/ { v = $0 } END { print (v ? v : "(unknown version)") }'; }
-mvk_src=""
-if [ "$MOLTENVK" != "0" ]; then
-  mvk_work="$(mktemp -d)"
-  mvk_tar="$MOLTENVK"
-  if [ -z "$MOLTENVK" ]; then
-    log "Downloading MoltenVK"
-    mvk_tar="$mvk_work/MoltenVK-macos.tar"
-    curl -fL --progress-bar -o "$mvk_tar" "$MOLTENVK_URL" || die "couldn't download $MOLTENVK_URL"
-    echo "$MOLTENVK_SHA256  $mvk_tar" | shasum -a 256 -c -s || die "checksum mismatch for $MOLTENVK_URL"
-  fi
-  [ -f "$mvk_tar" ] || die "MOLTENVK not found: $MOLTENVK"
-  # Preserve the input library if it's inside DEST_APP; the app is deleted below.
-  mvk_src="$mvk_work/libMoltenVK.dylib"
-  case "$mvk_tar" in
-    *.dylib) cp "$mvk_tar" "$mvk_src" ;;
-    *) tar -xf "$mvk_tar" -C "$mvk_work" MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib \
-         || die "no MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib in $mvk_tar"
-       mv "$mvk_work/MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib" "$mvk_src" ;;
-  esac
-  mvk_type="$(file -b "$mvk_src")"
-  case "$mvk_type" in
-    *"dynamically linked shared library x86_64"*) ;;
-    *) die "$MOLTENVK is not an x86_64 dynamic library: $mvk_type" ;;
-  esac
-  [ -f "$SRC_APP/Contents/SharedSupport/CrossOver/lib64/libMoltenVK.dylib" ] \
-    || die "$SRC_APP has no lib64/libMoltenVK.dylib to replace"
-  ok "MoltenVK $(mvk_version "$mvk_src") found"
-fi
+mvk_src="$MODULES/libMoltenVK.dylib"
+mvk_type="$(file -b "$mvk_src")"
+case "$mvk_type" in
+  *"dynamically linked shared library x86_64"*) ;;
+  *) die "$mvk_src is not an x86_64 dynamic library: $mvk_type" ;;
+esac
+[ -f "$SRC_APP/Contents/SharedSupport/CrossOver/lib64/libMoltenVK.dylib" ] \
+  || die "$SRC_APP has no lib64/libMoltenVK.dylib to replace"
+ok "MoltenVK $(mvk_version "$mvk_src") found"
 
 log "Copying $SRC_APP -> $DEST_APP"
 rm -rf "$DEST_APP"
@@ -126,15 +101,13 @@ if [ -n "$gptk_src" ]; then
   ok "D3DMetal $(d3dmetal_version "$DEST_GPTK")"
 fi
 
-if [ -n "$mvk_src" ]; then
-  log "Installing MoltenVK"
-  DEST_MVK="$CXR/lib64/libMoltenVK.dylib"
-  [ -f "$DEST_MVK" ] || die "$DEST_MVK not found in this CrossOver"
-  cp "$DEST_MVK" "$DEST_MVK.cxorig"
-  cp "$mvk_src" "$DEST_MVK"
-  codesign --force --sign - "$DEST_MVK"
-  ok "MoltenVK $(mvk_version "$DEST_MVK") (was $(mvk_version "$DEST_MVK.cxorig"))"
-fi
+log "Installing MoltenVK"
+DEST_MVK="$CXR/lib64/libMoltenVK.dylib"
+[ -f "$DEST_MVK" ] || die "$DEST_MVK not found in this CrossOver"
+cp "$DEST_MVK" "$DEST_MVK.cxorig"
+cp "$mvk_src" "$DEST_MVK"
+codesign --force --sign - "$DEST_MVK"
+ok "MoltenVK $(mvk_version "$DEST_MVK") (was $(mvk_version "$DEST_MVK.cxorig"))"
 
 log "Removing bundle seal and quarantine"
 rm -rf "$DEST_APP/Contents/_CodeSignature" "$DEST_APP/Contents/CodeResources"

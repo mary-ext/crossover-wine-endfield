@@ -1,6 +1,6 @@
 # patches/
 
-Applied to CrossOver's Wine 11.0 source by `scripts/build-modules.sh apply`, in this order: `stage2-dwproton/em-backports/*` → `stage2-dwproton/misc/*` → `stage1-macos/*`.
+Applied to CrossOver's Wine 11.0 source by `scripts/build-wine.sh apply`, in this order: `stage2-dwproton/em-backports/*` → `stage2-dwproton/misc/*` → `stage1-macos/*`.
 
 ## `stage2-dwproton/`
 
@@ -23,6 +23,13 @@ Endfield patches from dw-proton commit `b816be489` in [dawn-winery/dwproton-mirr
 - `0003-ntdll-don-t-close-the-msync-alert-index-on-thread-exit.patch`, in `dlls/ntdll/unix/thread.c`:
   - Skips closing `alert_fd` on thread exit under MSync: it holds a shared-memory index owned by the server. Closing it can close another thread's wineserver pipe and cause Unity's "SuspendThread loop failed" error.
 
+## `moltenvk/`
+
+Applied by `scripts/build-moltenvk.sh` to MoltenVK v1.4.2 and its pinned SPIRV-Cross revision (`spirv-cross/*`). Builds an x86_64 `libMoltenVK.dylib` into `build/moltenvk-out`.
+
+- `spirv-cross/0001-msl-fence-device-scope-control-barriers.patch`: adds device-scope atomic fences around control barriers (MSL 3.2+). `threadgroup_barrier` alone leaves cross-threadgroup reads stale on Apple GPUs. Fixes the stuck work-queue shader in Snowy Forest.
+- `0001-reject-pipeline-caches-without-the-barrier-fix.patch`: sets bit 31 of the Metal-features word in `pipelineCacheUUID` to reject cached MSL without the fences.
+
 ## License
 
-[Wine](https://www.winehq.org/) patches are licensed LGPL-2.1-or-later. `stage2-dwproton/*` retain upstream authorship (Etaash Mathamsetty, Ziia Shi / mkrsym1, NelloKudo and other dw-proton contributors).
+[Wine](https://www.winehq.org/) patches are licensed LGPL-2.1-or-later; `moltenvk/` patches, Apache-2.0 like MoltenVK and SPIRV-Cross. `stage2-dwproton/*` retain upstream authorship (Etaash Mathamsetty, Ziia Shi / mkrsym1, NelloKudo and other dw-proton contributors).
