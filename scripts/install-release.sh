@@ -6,7 +6,7 @@
 #   REPO      GitHub repository to download from (default mary-ext/crossover-wine-endfield)
 #   TAG       release tag (default: the latest release)
 #   BASE_URL  download from this URL instead of GitHub (expects the same asset names)
-#   SRC_APP, DEST_APP, GPTK, FORCE: see apply-modules.sh
+#   SRC_APP, DEST_APP, FORCE: see apply-modules.sh
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
