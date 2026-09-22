@@ -20,6 +20,8 @@ Endfield patches from dw-proton commit `b816be489` in [dawn-winery/dwproton-mirr
 - `0002-ntdll-bound-select-timeouts-in-NtDelayExecution.patch`, after `misc/0011`, in `dlls/ntdll/unix/sync.c`:
   - Caps `select()` waits at one day to avoid busy-looping on Darwin's `EINVAL` for timeouts over 10^8 seconds.
   - Waits indefinitely if a relative deadline would overflow, including for `INT64_MIN` timeouts.
+- `0003-ntdll-don-t-close-the-msync-alert-index-on-thread-exit.patch`, in `dlls/ntdll/unix/thread.c`:
+  - Skips closing `alert_fd` on thread exit under MSync: it holds a shared-memory index owned by the server. Closing it can close another thread's wineserver pipe and cause Unity's "SuspendThread loop failed" error.
 
 ## License
 
