@@ -48,7 +48,8 @@ See [patches/README.md](patches/README.md).
 ## License
 
 - `scripts/` and this README: [MIT](LICENSE).
-- Wine patches (`patches/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license. The dw-proton patches keep their upstream authorship.
+- Wine patches (`patches/wine/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license.
+  - The dwproton patches retain upstream authorship; upstream provides no separate patch license.
 - MoltenVK patches (`patches/moltenvk/`) and the built library: Apache-2.0, MoltenVK's license.
 
 Not affiliated with CodeWeavers, Gryphline/Hypergryph, Tencent, or Apple. Running the game in an unsupported configuration may violate its terms of service.

@@ -47,12 +47,12 @@ cmd_fetch() {
 cmd_apply() {
   log "Applying patches (em-backports -> misc -> macOS)"
   [ -d "$WINE_SRC/.git" ] || { echo "run 'fetch' first"; exit 1; }
-  local P="$REPO/patches"
+  local P="$REPO/patches/wine"
   ( cd "$WINE_SRC"
     n=0
-    for f in $(ls "$P"/stage2-dwproton/em-backports/*.patch | sort) \
-             $(ls "$P"/stage2-dwproton/misc/*.patch | sort) \
-             $(ls "$P"/stage1-macos/*.patch | sort); do
+    for f in $(ls "$P"/dwproton/em-backports/*.patch | sort) \
+             $(ls "$P"/dwproton/misc/*.patch | sort) \
+             $(ls "$P"/macos/*.patch | sort); do
       git apply "$f" || { echo "patch failed: $f"; exit 1; }
       n=$((n+1))
     done

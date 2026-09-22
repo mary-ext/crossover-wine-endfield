@@ -27,7 +27,7 @@ The MIT license covers this project's scripts, CI workflow and README files.
 
 Wine patches are licensed under the GNU Lesser General Public License,
 version 2.1 or later (LGPL-2.1-or-later). See patches/README.md for attribution.
-Patches under patches/stage2-dwproton/ retain dw-proton's upstream authorship
+Patches under patches/wine/dwproton/ retain dwproton's upstream authorship
 and licensing.
 
 Wine, CrossOver, Apple's Game Porting Toolkit, MoltenVK and Arknights: Endfield

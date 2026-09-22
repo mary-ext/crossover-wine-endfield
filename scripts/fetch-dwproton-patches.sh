@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Fetch Endfield's dw-proton patches into patches/stage2-dwproton.
+# Fetch certain dwproton patches into patches/wine/dwproton.
 #
-# Default: b816be489 (GE issue #433). Override with DWPROTON_SHA.
-# The GitHub mirror shares dawn.wine's git objects and avoids its anti-bot wall.
-#
-# Usage: scripts/fetch-dwproton-patches.sh   (run from repo root)
+# Usage: scripts/fetch-dwproton-patches.sh
+# Env:
+#   DWPROTON_SHA  (default: b816be489)
 
 set -uo pipefail
 SHA="${DWPROTON_SHA:-b816be489049a10453b470c6a12dcf552ea41773}"
 REPO="dawn-winery/dwproton-mirror"
 BASE="https://raw.githubusercontent.com/${REPO}/${SHA}/patches/wine"
-DEST="patches/stage2-dwproton"
+DEST="patches/wine/dwproton"
 
 mkdir -p "$DEST/misc" "$DEST/em-backports"
-echo "Fetching dw-proton patches from ${REPO}@${SHA:0:12}"
+echo "Fetching dwproton patches from ${REPO}@${SHA:0:12}"
 
 # Dispatcher spoof, QPC waits and wintrust bypass (unused on macOS).
 for p in \
