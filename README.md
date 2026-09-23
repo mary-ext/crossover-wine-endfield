@@ -34,7 +34,14 @@ Pass a step name to run only that step:
 ## After installing
 
 - If macOS blocks the first launch, open **System Settings → Privacy & Security → Open Anyway**.
-- Enable **MSync** in the bottle's advanced settings.
+- Enable MSync in the bottle's advanced settings.
+- Disable MoltenVK's synchronous queue submits
+
+  Add this under `[EnvironmentVariables]` in `~/Library/Application Support/CrossOver/Bottles/<bottle>/cxbottle.conf`
+
+  ```ini
+  "MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS" = "0"
+  ```
 
 ## Patches
 

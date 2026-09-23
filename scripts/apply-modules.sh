@@ -18,7 +18,7 @@ warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 die(){  printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 log "Checking modules in $MODULES"
-for f in ntdll.so kernel32.dll ntoskrnl.exe libMoltenVK.dylib CROSSOVER_VERSION SHA256SUMS; do
+for f in ntdll.so kernel32.dll ntoskrnl.exe wineserver libMoltenVK.dylib CROSSOVER_VERSION SHA256SUMS; do
   [ -f "$MODULES/$f" ] || die "$MODULES/$f not found — run scripts/install-release.sh or follow README.md's source build steps"
 done
 ( cd "$MODULES" && shasum -a 256 -c -s SHA256SUMS ) || die "checksum mismatch in $MODULES"
@@ -64,6 +64,18 @@ swap ntdll.so     x86_64-unix/ntdll.so
 swap kernel32.dll x86_64-windows/kernel32.dll
 swap ntoskrnl.exe x86_64-windows/ntoskrnl.exe
 codesign --force --sign - "$CXR/lib/wine/x86_64-unix/ntdll.so"
+
+# Preserve CrossOver's entitlements for the hardened runtime.
+DEST_WS="$CXR/CrossOver-Hosted Application/wineserver"
+[ -f "$DEST_WS" ] || die "wineserver not found: $DEST_WS"
+ents="$(mktemp)"
+codesign -d --xml --entitlements "$ents" "$DEST_WS" 2>/dev/null || die "cannot read wineserver entitlements"
+cp "$DEST_WS" "$DEST_WS.cxorig"
+cp "$MODULES/wineserver" "$DEST_WS"
+chmod 755 "$DEST_WS"  # CI artifacts drop the exec bit
+codesign --force --sign - --options runtime --entitlements "$ents" "$DEST_WS"
+rm -f "$ents"
+ok "wineserver"
 
 log "Installing MoltenVK"
 DEST_MVK="$CXR/lib64/libMoltenVK.dylib"

@@ -1,0 +1,188 @@
+diff --git a/dlls/ntdll/unix/msync.c b/dlls/ntdll/unix/msync.c
+index ae46bf3..e64607e 100644
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -103,6 +103,28 @@ static inline int ulock_wait( uint32_t operation, void *addr, uint64_t value, ui
+     }
+ }
+ 
++/*
++ * Per-object sleeper counts, allocated by wineserver after the tid map for the session.
++ * Clients skip wake syscalls when the count is zero; wineserver always wakes.
++ *
++ * msync_wait_single() registers before the kernel compares the object state. Releasers
++ * publish state with a full barrier before reading the count: either the releaser sees
++ * the registration or the kernel sees the new state. Overcounts cause only extra wakes.
++ */
++#define WAITER_SLOTS (1u << 22)
++static const mach_vm_size_t shm_waiter_size = WAITER_SLOTS * sizeof(int);
++static int *waiter_table;
++
++/* Spin before untimed object waits to avoid sleeping on short-lived contention.
++ * WINEMSYNC_SPIN_US sets the duration in microseconds; 0 disables spinning. */
++static ULONGLONG spin_ns = 15000;
++
++/* Objects outside the table use unconditional wakes. */
++static inline int *waiter_count( unsigned int idx )
++{
++    return idx < WAITER_SLOTS ? waiter_table + idx : NULL;
++}
++
+ /*
+  * Faster to directly do the syscall and inline everything, taken and slightly adapted
+  * from xnu/libsyscall/mach/mach_msg.c
+@@ -298,13 +320,29 @@ static inline void server_remove_wait( unsigned int msgh_id, const int *objs, vo
+         ERR("Failed to send server remove wait: %#x\n", mr);
+ }
+ 
++static BOOL spin_until_changed( void *obj_shm, int val )
++{
++    ULONGLONG deadline = clock_gettime_nsec_np( CLOCK_UPTIME_RAW ) + spin_ns;
++    unsigned int i = 0;
++
++    for (;;)
++    {
++        if (__atomic_load_n( (int *)obj_shm, __ATOMIC_ACQUIRE ) != val) return TRUE;
++        if (!(++i & 15) && clock_gettime_nsec_np( CLOCK_UPTIME_RAW ) >= deadline) return FALSE;
++        YieldProcessor();
++    }
++}
++
+ static inline NTSTATUS msync_wait_single( int obj, void *obj_shm,
+-                                          ULONGLONG *end, int tid )
++                                          ULONGLONG *end, int tid, BOOL spin )
+ {
+     int ret, val = 0;
+     ULONGLONG ns_timeleft = 0;
++    int *waiters = waiter_count( obj );
++
++    spin = spin && spin_ns && !end;
+ 
+-    do 
++    do
+     {
+         if (((struct mutex *)obj_shm)->msync_type == MSYNC_MUTEX)
+         {
+@@ -316,12 +354,21 @@ static inline NTSTATUS msync_wait_single( int obj, void *obj_shm,
+         if (__atomic_load_n( (int *)obj_shm, __ATOMIC_ACQUIRE ) != val)
+             return STATUS_PENDING;
+ 
++        if (spin)
++        {
++            spin = FALSE;
++            if (spin_until_changed( obj_shm, val )) return STATUS_PENDING;
++        }
++
+         if (end)
+         {
+             ns_timeleft = update_timeout( *end ) * 100;
+             if (!ns_timeleft) return STATUS_TIMEOUT;
+         }
++        /* Register before the kernel checks val to avoid missing a wake. */
++        if (waiters) __atomic_add_fetch( waiters, 1, __ATOMIC_SEQ_CST );
+         ret = ulock_wait( UL_COMPARE_AND_WAIT_SHARED | ULF_NO_ERRNO, obj_shm, val, ns_timeleft );
++        if (waiters) __atomic_sub_fetch( waiters, 1, __ATOMIC_SEQ_CST );
+     } while (ret == -EINTR || ret == -EFAULT);
+ 
+     if (ret == -ETIMEDOUT)
+@@ -488,7 +535,7 @@ static void *request_shm_from_server( int entry, int tid )
+     }
+     else
+     {
+-        mach_vm_size_t size = tid ? shm_tid_size : pagesize;
++        mach_vm_size_t size = tid ? shm_tid_size + shm_waiter_size : pagesize;
+ 
+         TRACE( "mapping shm entry %u with size %llu\n", receive_message.descriptor.name, size );
+ 
+@@ -583,6 +630,7 @@ void msync_init(void)
+     mach_port_t bootstrap_port;
+     void *dlhandle = dlopen( NULL, RTLD_NOW );
+     char message_port_name[28];
++    const char *env;
+ 
+     if (!do_msync())
+     {
+@@ -615,6 +663,8 @@ void msync_init(void)
+ 
+     pagesize = (long)vm_kernel_page_size;
+ 
++    if ((env = getenv( "WINEMSYNC_SPIN_US" ))) spin_ns = strtoull( env, NULL, 10 ) * 1000;
++
+     shm_addrs = calloc( 128, sizeof(shm_addrs[0]) );
+     shm_addrs_size = 128;
+ 
+@@ -641,17 +691,20 @@ void msync_init(void)
+ 
+     if (!shm_tid_map)
+     {
+-        ERR("Failed to map tid shared memory");
++        ERR("Failed to map tid shared memory\n");
+         exit(1);
+     }
++    waiter_table = (int *)((char *)shm_tid_map + shm_tid_size);
+ }
+ 
+ static inline void signal_all( void *shm, unsigned int shm_idx )
+ {
+     __thread static mach_msg_header_t send_header;
+     struct event *event_obj = (struct event *)shm;
++    int *waiters = waiter_count( shm_idx );
+ 
+-    __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, shm, 0 );
++    if (!waiters || __atomic_load_n( waiters, __ATOMIC_SEQ_CST ))
++        __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, shm, 0 );
+ 
+     if (!__atomic_load_n( &event_obj->multiple_waiters, __ATOMIC_SEQ_CST ))
+         return;
+@@ -796,7 +849,7 @@ static NTSTATUS do_single_wait( int obj, void *obj_shm, int alert_obj, void *ale
+     }
+     else
+     {
+-        status = msync_wait_single( obj, obj_shm, end, tid );
++        status = msync_wait_single( obj, obj_shm, end, tid, TRUE );
+     }
+     return status;
+ }
+@@ -933,9 +986,9 @@ NTSTATUS msync_wait_objs( const DWORD count, const int *objs, BOOLEAN wait_any,
+             }
+ 
+             if (alert_obj && single_wait)
+-                ret = msync_wait_single( alert_obj, alert_obj_shm, timeout ? &end : NULL, current_tid );
++                ret = msync_wait_single( alert_obj, alert_obj_shm, timeout ? &end : NULL, current_tid, FALSE );
+             else if (single_wait)
+-                ret = msync_wait_single( objs[0], objs_shm[0], timeout ? &end : NULL, current_tid );
++                ret = msync_wait_single( objs[0], objs_shm[0], timeout ? &end : NULL, current_tid, TRUE );
+             else
+                 ret = msync_wait_multiple( objs, objs_shm, alert_obj, alert_obj_shm, count, timeout ? &end : NULL, current_tid );
+ 
+diff --git a/server/msync.c b/server/msync.c
+index eecf9b3..9e38ba1 100644
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -202,6 +202,8 @@ static struct tid_list *tid_map;
+ static size_t tid_map_size;
+ static int *shm_tid_map;
+ static const mach_vm_size_t shm_tid_size = 64 * 1024 * 1024; /* 64 MB to index 24 bit tids */
++/* Per-object client sleeper counts follow the tid map; see ntdll's msync.c. */
++static const mach_vm_size_t shm_waiter_size = 16 * 1024 * 1024;
+ 
+ /* This function should only be called from get_tid_list() */
+ static void grow_tid_map( unsigned int shm_idx )
+@@ -296,7 +298,7 @@ static void send_shm_to_client( mach_map_message_t *message )
+     if (message->header.msgh_id)
+     {
+         offset = (memory_object_offset_t)shm_tid_map;
+-        entry_size = shm_tid_size;
++        entry_size = shm_tid_size + shm_waiter_size;
+     }
+     else if (message->entry < shm_addrs_size)
+     {
+@@ -583,7 +585,7 @@ void msync_init_shm(void)
+     shm_addrs = calloc( 128, sizeof(shm_addrs[0]) );
+     shm_addrs_size = 128;
+ 
+-    kr = mach_vm_map( mach_task_self(), (mach_vm_address_t *)&shm_tid_map, shm_tid_size, 0, VM_FLAGS_ANYWHERE,
++    kr = mach_vm_map( mach_task_self(), (mach_vm_address_t *)&shm_tid_map, shm_tid_size + shm_waiter_size, 0, VM_FLAGS_ANYWHERE,
+                       MACH_PORT_NULL, 0, FALSE, VM_PROT_DEFAULT, VM_PROT_DEFAULT, VM_INHERIT_SHARE );
+ 
+     if (kr != KERN_SUCCESS)
