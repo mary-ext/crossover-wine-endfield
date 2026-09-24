@@ -59,6 +59,9 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
   - Saves pipeline descriptors for background replay to warm Metal's shader cache. Verifies that each new recipe reconstructs the original descriptor; stores recipes after shader libraries so older readers ignore them.
   - `MVK_CONFIG_PIPELINE_CACHE_BACKGROUND_WORKERS` sets the worker count (default 4; 0 disables background work).
   - Retrieves and specializes Metal functions without the device-wide lock.
+- `0005-make-vertex-positions-invariant.patch`:
+  - Makes vertex and tessellation evaluation shader positions invariant so depth prepasses and subsequent EQUAL depth tests agree.
+  - Fixes TAA smearing.
 
 ## License
 
