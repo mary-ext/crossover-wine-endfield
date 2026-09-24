@@ -54,6 +54,11 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
   - Converts SPIR-V and compiles `MTLLibrary` objects outside the pipeline cache lock. A per-module lock prevents duplicate compilation.
   - Compiles libraries from a loaded pipeline cache in parallel.
   - Protects specialization variants and error reporting against concurrent access.
+- `0004-defer-cached-shader-libraries-and-replay-recorded-pipelines.patch`:
+  - Compiles cached `MTLLibrary` objects on first use or in the background. Shares libraries with identical MSL and compile options.
+  - Saves pipeline descriptors for background replay to warm Metal's shader cache. Verifies that each new recipe reconstructs the original descriptor; stores recipes after shader libraries so older readers ignore them.
+  - `MVK_CONFIG_PIPELINE_CACHE_BACKGROUND_WORKERS` sets the worker count (default 4; 0 disables background work).
+  - Retrieves and specializes Metal functions without the device-wide lock.
 
 ## License
 
