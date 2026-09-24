@@ -50,6 +50,10 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
 - `0002-use-metal-hazard-tracking-instead-of-barrier-fences.patch`:
   - Replaces per-stage `MTLFence`s with Metal's per-resource hazard tracking (`useResource`) so unrelated GPU passes can overlap.
   - Retains the residency set.
+- `0003-compile-shader-libraries-outside-the-pipeline-cache-lock.patch`:
+  - Converts SPIR-V and compiles `MTLLibrary` objects outside the pipeline cache lock. A per-module lock prevents duplicate compilation.
+  - Compiles libraries from a loaded pipeline cache in parallel.
+  - Protects specialization variants and error reporting against concurrent access.
 
 ## License
 
