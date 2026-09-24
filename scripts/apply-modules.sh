@@ -52,16 +52,15 @@ check_inputs() {
 copy_app() {
   log "Copying $SRC_APP -> $DEST_APP"
   rm -rf "$DEST_APP"
-  cp -a "$SRC_APP" "$DEST_APP"
+  # Exclude quarantine and Finder metadata that prevents signing.
+  ditto --noextattr --noqtn "$SRC_APP" "$DEST_APP"
 }
 
 install_components() {
-  local i dst
+  local i
   log "Installing patched Wine and MoltenVK builds"
   for i in "${!components[@]}"; do
-    dst="$CXR/${paths[$i]}"
-    cp "$dst" "$dst.cxorig"
-    cp "$MODULES/${components[$i]}" "$dst"
+    cp "$MODULES/${components[$i]}" "$CXR/${paths[$i]}"
     ok "${components[$i]}"
   done
   chmod 755 "$CXR/CrossOver-Hosted Application/wineserver" # CI artifacts drop the exec bit
@@ -73,6 +72,19 @@ sign_components() {
   codesign --force --sign - "$CXR/lib64/libMoltenVK.dylib"
   codesign --force --sign - --options runtime --entitlements "$ents" \
     "$CXR/CrossOver-Hosted Application/wineserver"
+}
+
+# Re-sign the bundle: macOS can reject unsealed copies tagged with com.apple.provenance.
+seal_app() {
+  log "Signing app bundle"
+  # ditto --noextattr can leave FinderInfo on the bundle directory.
+  xattr -rd com.apple.FinderInfo "$DEST_APP" 2>/dev/null || true
+  xattr -rd com.apple.ResourceFork "$DEST_APP" 2>/dev/null || true
+  # Omit --deep to keep nested CodeWeavers signatures. Keep entitlements but drop the
+  # hardened runtime: its library validation rejects those signatures under ad-hoc signing.
+  codesign --force --sign - --preserve-metadata=entitlements --timestamp=none "$DEST_APP"
+  codesign --verify --deep --strict "$DEST_APP" || die "bundle signature verification failed"
+  ok "bundle signature valid"
 }
 
 check_inputs
@@ -88,10 +100,7 @@ codesign -d --xml --entitlements "$ents" \
 copy_app
 install_components
 sign_components
-
-log "Removing bundle seal and quarantine"
-rm -rf "$DEST_APP/Contents/_CodeSignature" "$DEST_APP/Contents/CodeResources"
-xattr -dr com.apple.quarantine "$DEST_APP" 2>/dev/null || true
+seal_app
 
 cat <<EOF
 
