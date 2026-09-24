@@ -47,6 +47,9 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
   - Fixes stale cross-threadgroup reads left by `threadgroup_barrier` alone on Apple GPUs, resolving the stuck work-queue shader in Snowy Forest.
 - `0001-reject-pipeline-caches-without-the-barrier-fix.patch`:
   - Sets bit 31 of the Metal-features word in `pipelineCacheUUID` to reject cached MSL without the fences.
+- `0002-use-metal-hazard-tracking-instead-of-barrier-fences.patch`:
+  - Replaces per-stage `MTLFence`s with Metal's per-resource hazard tracking (`useResource`) so unrelated GPU passes can overlap.
+  - Retains the residency set.
 
 ## License
 
