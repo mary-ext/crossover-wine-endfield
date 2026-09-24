@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install packaged Wine modules and MoltenVK into a copy of CrossOver.
+# Install our packaged Wine and MoltenVK builds into a copy of CrossOver.
 #
 # Usage:  scripts/apply-modules.sh [MODULES_DIR]    (default: dist/endfield-wine-modules)
 # Env:
@@ -17,73 +17,77 @@ ok(){   printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 die(){  printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-log "Checking modules in $MODULES"
-for f in ntdll.so kernel32.dll ntoskrnl.exe wineserver libMoltenVK.dylib CROSSOVER_VERSION SHA256SUMS; do
-  [ -f "$MODULES/$f" ] || die "$MODULES/$f not found — run scripts/install-release.sh or follow README.md's source build steps"
-done
-( cd "$MODULES" && shasum -a 256 -c -s SHA256SUMS ) || die "checksum mismatch in $MODULES"
-ok "checksums match"
+# Package files and their destinations in the supported CrossOver layout.
+components=(ntdll.so kernel32.dll ntoskrnl.exe wineserver libMoltenVK.dylib)
+paths=(
+  lib/wine/x86_64-unix/ntdll.so
+  lib/wine/x86_64-windows/kernel32.dll
+  lib/wine/x86_64-windows/ntoskrnl.exe
+  "CrossOver-Hosted Application/wineserver"
+  lib64/libMoltenVK.dylib
+)
 
-[ -d "$SRC_APP" ] || die "$SRC_APP not found"
-case "$DEST_APP" in *.app) ;; *) die "DEST_APP must end in .app: $DEST_APP" ;; esac
-[ "$DEST_APP" != "$SRC_APP" ] || die "DEST_APP must differ from SRC_APP"
+check_inputs() {
+  local f built app_ver
+  log "Checking modules in $MODULES"
+  for f in "${components[@]}" CROSSOVER_VERSION SHA256SUMS; do
+    [ -f "$MODULES/$f" ] || die "$MODULES/$f not found — run scripts/install-release.sh or follow README.md's source build steps"
+  done
+  ( cd "$MODULES" && shasum -a 256 -c -s SHA256SUMS ) || die "checksum mismatch in $MODULES"
+  ok "checksums match"
 
-built="$(cat "$MODULES/CROSSOVER_VERSION")"
-app_ver="$(defaults read "$SRC_APP/Contents/Info" CFBundleVersion 2>/dev/null || echo unknown)"
-case "$app_ver." in
-  "$built".*) ok "CrossOver $app_ver matches module version $built" ;;
-  *) if [ "${FORCE:-0}" = "1" ]; then warn "CrossOver $app_ver; modules require $built (overridden by FORCE=1)"
-     else die "$SRC_APP is CrossOver $app_ver; modules require $built for ABI compatibility (FORCE=1 to override)."; fi ;;
-esac
+  [ -d "$SRC_APP" ] || die "$SRC_APP not found"
+  case "$DEST_APP" in *.app) ;; *) die "DEST_APP must end in .app: $DEST_APP" ;; esac
+  [ "$DEST_APP" != "$SRC_APP" ] || die "DEST_APP must differ from SRC_APP"
 
-mvk_version(){ LC_ALL=C tr '\0' '\n' < "$1" | LC_ALL=C awk '!v && /^[0-9]+\.[0-9]+\.[0-9]+$/ { v = $0 } END { print (v ? v : "(unknown version)") }'; }
-mvk_src="$MODULES/libMoltenVK.dylib"
-mvk_type="$(file -b "$mvk_src")"
-case "$mvk_type" in
-  *"dynamically linked shared library x86_64"*) ;;
-  *) die "$mvk_src is not an x86_64 dynamic library: $mvk_type" ;;
-esac
-[ -f "$SRC_APP/Contents/SharedSupport/CrossOver/lib64/libMoltenVK.dylib" ] \
-  || die "$SRC_APP has no lib64/libMoltenVK.dylib to replace"
-ok "MoltenVK $(mvk_version "$mvk_src") found"
+  built="$(cat "$MODULES/CROSSOVER_VERSION")"
+  app_ver="$(defaults read "$SRC_APP/Contents/Info" CFBundleVersion 2>/dev/null || echo unknown)"
+  case "$app_ver." in
+    "$built".*) ok "CrossOver $app_ver matches module version $built" ;;
+    *) if [ "${FORCE:-0}" = "1" ]; then warn "CrossOver $app_ver; modules require $built (overridden by FORCE=1)"
+       else die "$SRC_APP is CrossOver $app_ver; modules require $built for ABI compatibility (FORCE=1 to override)."; fi ;;
+  esac
+}
 
-log "Copying $SRC_APP -> $DEST_APP"
-rm -rf "$DEST_APP"
-cp -a "$SRC_APP" "$DEST_APP"
+copy_app() {
+  log "Copying $SRC_APP -> $DEST_APP"
+  rm -rf "$DEST_APP"
+  cp -a "$SRC_APP" "$DEST_APP"
+}
+
+install_components() {
+  local i dst
+  log "Installing patched Wine and MoltenVK builds"
+  for i in "${!components[@]}"; do
+    dst="$CXR/${paths[$i]}"
+    cp "$dst" "$dst.cxorig"
+    cp "$MODULES/${components[$i]}" "$dst"
+    ok "${components[$i]}"
+  done
+  chmod 755 "$CXR/CrossOver-Hosted Application/wineserver" # CI artifacts drop the exec bit
+}
+
+sign_components() {
+  log "Signing patched Mach-O components"
+  codesign --force --sign - "$CXR/lib/wine/x86_64-unix/ntdll.so"
+  codesign --force --sign - "$CXR/lib64/libMoltenVK.dylib"
+  codesign --force --sign - --options runtime --entitlements "$ents" \
+    "$CXR/CrossOver-Hosted Application/wineserver"
+}
+
+check_inputs
 CXR="$DEST_APP/Contents/SharedSupport/CrossOver"
 
-log "Installing patched Wine modules"
-swap(){ # module  path-under-lib/wine
-  local dst="$CXR/lib/wine/$2"
-  [ -f "$dst" ] || die "Wine module missing: $dst"
-  cp "$dst" "$dst.cxorig"
-  cp "$MODULES/$1" "$dst"
-  ok "$2"
-}
-swap ntdll.so     x86_64-unix/ntdll.so
-swap kernel32.dll x86_64-windows/kernel32.dll
-swap ntoskrnl.exe x86_64-windows/ntoskrnl.exe
-codesign --force --sign - "$CXR/lib/wine/x86_64-unix/ntdll.so"
-
-# Preserve CrossOver's entitlements for the hardened runtime.
-DEST_WS="$CXR/CrossOver-Hosted Application/wineserver"
-[ -f "$DEST_WS" ] || die "wineserver not found: $DEST_WS"
+# Read the original wineserver's hardened-runtime entitlements before replacing it.
 ents="$(mktemp)"
-codesign -d --xml --entitlements "$ents" "$DEST_WS" 2>/dev/null || die "cannot read wineserver entitlements"
-cp "$DEST_WS" "$DEST_WS.cxorig"
-cp "$MODULES/wineserver" "$DEST_WS"
-chmod 755 "$DEST_WS"  # CI artifacts drop the exec bit
-codesign --force --sign - --options runtime --entitlements "$ents" "$DEST_WS"
-rm -f "$ents"
-ok "wineserver"
+trap 'rm -f "$ents"' EXIT
+codesign -d --xml --entitlements "$ents" \
+  "$SRC_APP/Contents/SharedSupport/CrossOver/CrossOver-Hosted Application/wineserver" \
+  2>/dev/null || die "cannot read wineserver entitlements"
 
-log "Installing MoltenVK"
-DEST_MVK="$CXR/lib64/libMoltenVK.dylib"
-[ -f "$DEST_MVK" ] || die "$DEST_MVK not found in this CrossOver"
-cp "$DEST_MVK" "$DEST_MVK.cxorig"
-cp "$mvk_src" "$DEST_MVK"
-codesign --force --sign - "$DEST_MVK"
-ok "MoltenVK $(mvk_version "$DEST_MVK") (was $(mvk_version "$DEST_MVK.cxorig"))"
+copy_app
+install_components
+sign_components
 
 log "Removing bundle seal and quarantine"
 rm -rf "$DEST_APP/Contents/_CodeSignature" "$DEST_APP/Contents/CodeResources"
@@ -93,6 +97,5 @@ cat <<EOF
 
 Created $DEST_APP
 
-Open the app. If macOS blocks it, choose "Open Anyway" in System Settings -> Privacy & Security.
-Enable MSync in the bottle's advanced settings.
+If macOS blocks it, choose "Open Anyway" in System Settings -> Privacy & Security.
 EOF
