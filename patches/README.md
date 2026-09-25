@@ -37,6 +37,9 @@ Taken from [`dawn-winery/dwproton-mirror#b816be489`](https://github.com/dawn-win
 - `0004-msync-skip-wakes-without-sleepers-and-spin-before-sleeping.patch`:
   - Skips client wake syscalls for MSync objects with no registered sleepers.
   - Spins for 15 µs before sleeping on untimed object waits (`WINEMSYNC_SPIN_US` sets microseconds; `0` disables).
+- `0005-ntoskrnl-implement-PsGetProcessExitStatus.patch`:
+  - Implements `PsGetProcessExitStatus` to prevent the stub from aborting an ACE background thread.
+  - Refreshes the cached status until exit; returns the cached value if querying fails.
 
 ## MoltenVK
 
