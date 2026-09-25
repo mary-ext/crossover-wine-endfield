@@ -40,6 +40,9 @@ Taken from [`dawn-winery/dwproton-mirror#b816be489`](https://github.com/dawn-win
 - `0005-ntoskrnl-implement-PsGetProcessExitStatus.patch`:
   - Implements `PsGetProcessExitStatus` to prevent the stub from aborting an ACE background thread.
   - Refreshes the cached status until exit; returns the cached value if querying fails.
+- `0006-msync-query-time-only-for-relative-timeouts.patch`:
+  - Reads the system clock only when converting a relative timeout to an absolute deadline.
+  - Avoids an unused clock read for infinite waits and existing absolute deadlines; wait and wake behavior is unchanged.
 
 ## MoltenVK
 
@@ -65,6 +68,9 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
 - `0005-make-vertex-positions-invariant.patch`:
   - Makes vertex and tessellation evaluation shader positions invariant so depth prepasses and subsequent EQUAL depth tests agree.
   - Fixes TAA smearing.
+- `0006-reuse-resource-tracking-nodes.patch`:
+  - Reuses resource-table nodes across Metal encoder passes within one command encoder, invalidating usage with a generation counter. Clears on generation wrap or when more than 4096 nodes are retained.
+  - Uses a pointer-specific hash and power-of-two buckets to reduce lookup overhead. Metal resource-use calls remain unchanged.
 
 ## License
 

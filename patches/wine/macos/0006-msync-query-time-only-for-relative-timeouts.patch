@@ -1,0 +1,21 @@
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -879,7 +879,6 @@
+         if (count == 1) single_wait = 1;
+     }
+ 
+-    NtQuerySystemTime( &now );
+     if (timeout)
+     {
+         if (timeout->QuadPart == TIMEOUT_INFINITE)
+@@ -887,7 +886,10 @@
+         else if (timeout->QuadPart > 0)
+             end = timeout->QuadPart;
+         else
++        {
++            NtQuerySystemTime( &now );
+             end = now.QuadPart - timeout->QuadPart;
++        }
+     }
+ 
+     for (i = 0; i < count; i++)
