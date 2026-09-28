@@ -1,0 +1,74 @@
+diff --git a/dlls/kernel32/module.c b/dlls/kernel32/module.c
+index 6c98af9..f452093 100644
+--- a/dlls/kernel32/module.c
++++ b/dlls/kernel32/module.c
+@@ -261,10 +261,10 @@ BOOL WINAPI GetBinaryTypeA( LPCSTR lpApplicationName, LPDWORD lpBinaryType )
+     return GetBinaryTypeW(NtCurrentTeb()->StaticUnicodeString.Buffer, lpBinaryType);
+ }
+ 
+-#ifdef __x86_64__
++#if defined(__x86_64__) || defined(__arm64ec__)
+ static BOOL needs_int3_hack(void)
+ {
+-    static volatile char cache = -1;
++    static volatile signed char cache = -1;
+     BOOL ret = cache;
+     if (ret == -1)
+     {
+@@ -273,13 +273,30 @@ static BOOL needs_int3_hack(void)
+             name = p + 1;
+         if ((p = wcsrchr(name, '\\')))
+             name = p + 1;
+-        
++
+         ret = (!wcsicmp(name, L"Endfield.exe"));
+         cache = ret;
+     }
+     return ret;
+ }
+ 
++#ifdef __arm64ec__
++static INIT_ONCE int3_once = INIT_ONCE_STATIC_INIT;
++static void *int3_code;
++static BOOL CALLBACK init_int3_code(INIT_ONCE *once, void *param, void **ctx)
++{
++    DWORD old;
++    /* Dynamically allocated executable memory is x64 code in an EC process. */
++    void *code = VirtualAlloc(NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
++    if (!code) return FALSE;
++    memset(code, 0xcc, 4096);
++    if (!VirtualProtect(code, 4096, PAGE_EXECUTE_READ, &old))
++    { VirtualFree(code, 0, MEM_RELEASE); return FALSE; }
++    FlushInstructionCache(GetCurrentProcess(), code, 4096);
++    int3_code = code;
++    return TRUE;
++}
++#else
+ static void __attribute__((naked)) int3_stub( void )
+ {
+     asm("int3\t\n"
+@@ -288,6 +305,7 @@ static void __attribute__((naked)) int3_stub( void )
+         "int3\t\n");
+ }
+ #endif
++#endif
+ 
+ /***********************************************************************
+  *           GetProcAddress   		(KERNEL32.@)
+@@ -312,11 +330,15 @@ FARPROC get_proc_address( HMODULE hModule, LPCSTR function )
+     {
+         ANSI_STRING     str;
+ 
+-#ifdef __x86_64__
++#if defined(__x86_64__) || defined(__arm64ec__)
+         if (needs_int3_hack() && (strcmp( function, "KiUserApcDispatcher" ) == 0 || strcmp( function, "KiUserCallbackDispatcher" ) == 0))
+         {
+             FIXME( "HACK: returning int3 stub instead of %s\n", function );
++#ifdef __arm64ec__
++            if (InitOnceExecuteOnce(&int3_once, init_int3_code, NULL, NULL)) return (FARPROC)int3_code;
++#else
+             return (FARPROC)&int3_stub;
++#endif
+         }
+ #endif
+ 

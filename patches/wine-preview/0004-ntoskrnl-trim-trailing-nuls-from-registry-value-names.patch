@@ -1,0 +1,75 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index d6979d0..4d0eb7f 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -5106,3 +5106,39 @@ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, LPVOID reserved )
+     }
+     return TRUE;
+ }
++
++/* Kernel callers may count trailing terminators in registry value names. Trim them here rather
++ * than in ntdll, where user-mode names with embedded NULs must stay distinct. */
++static BOOL trim_value_name( const UNICODE_STRING *name, UNICODE_STRING *trimmed )
++{
++    *trimmed = *name;
++    if (trimmed->Length & 1) return FALSE;
++    while (trimmed->Length >= sizeof(WCHAR) && !trimmed->Buffer[trimmed->Length / sizeof(WCHAR) - 1])
++        trimmed->Length -= sizeof(WCHAR);
++    TRACE( "%s -> %s\n", debugstr_us(name), debugstr_us(trimmed) );
++    return TRUE;
++}
++
++NTSTATUS WINAPI ZwQueryValueKey( HANDLE key, const UNICODE_STRING *name,
++                                KEY_VALUE_INFORMATION_CLASS info_class, void *info,
++                                ULONG length, ULONG *result_length )
++{
++    UNICODE_STRING trimmed;
++    if (!trim_value_name( name, &trimmed )) return STATUS_INVALID_PARAMETER;
++    return NtQueryValueKey( key, &trimmed, info_class, info, length, result_length );
++}
++
++NTSTATUS WINAPI ZwSetValueKey( HANDLE key, const UNICODE_STRING *name, ULONG title,
++                              ULONG type, const void *data, ULONG length )
++{
++    UNICODE_STRING trimmed;
++    if (!trim_value_name( name, &trimmed )) return STATUS_INVALID_PARAMETER;
++    return NtSetValueKey( key, &trimmed, title, type, data, length );
++}
++
++NTSTATUS WINAPI ZwDeleteValueKey( HANDLE key, const UNICODE_STRING *name )
++{
++    UNICODE_STRING trimmed;
++    if (!trim_value_name( name, &trimmed )) return STATUS_INVALID_PARAMETER;
++    return NtDeleteValueKey( key, &trimmed );
++}
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index e1c6dea..5496bc8 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -1435,7 +1435,7 @@
+ @ stub ZwDeleteBootEntry
+ @ stdcall -private ZwDeleteFile(ptr) NtDeleteFile
+ @ stdcall -private ZwDeleteKey(long) NtDeleteKey
+-@ stdcall -private ZwDeleteValueKey(long ptr) NtDeleteValueKey
++@ stdcall -private ZwDeleteValueKey(long ptr)
+ @ stdcall -private ZwDeviceIoControlFile(long long ptr ptr ptr long ptr long ptr long) NtDeviceIoControlFile
+ @ stdcall -private ZwDisplayString(ptr) NtDisplayString
+ @ stdcall ZwDuplicateObject(long long long ptr long long long) NtDuplicateObject
+@@ -1505,7 +1505,7 @@
+ @ stdcall -private ZwQuerySystemInformation(long ptr long ptr) NtQuerySystemInformation
+ @ stdcall -private ZwQuerySystemInformationEx(long ptr long ptr long ptr) NtQuerySystemInformationEx
+ @ stdcall -private ZwQueryTimerResolution(ptr ptr ptr) NtQueryTimerResolution
+-@ stdcall ZwQueryValueKey(long ptr long ptr long ptr) NtQueryValueKey
++@ stdcall ZwQueryValueKey(long ptr long ptr long ptr)
+ @ stdcall -private ZwQueryVirtualMemory(long ptr long ptr long ptr) NtQueryVirtualMemory
+ @ stdcall -private ZwQueryVolumeInformationFile(long ptr ptr long long) NtQueryVolumeInformationFile
+ @ stdcall -private ZwReadFile(long long ptr ptr ptr ptr long ptr ptr) NtReadFile
+@@ -1541,7 +1541,7 @@
+ @ stdcall -private ZwSetSystemTime(ptr ptr) NtSetSystemTime
+ @ stdcall -private ZwSetTimer(long ptr ptr ptr long long ptr) NtSetTimer
+ @ stdcall -private ZwSetTimerResolution(long long ptr) NtSetTimerResolution
+-@ stdcall -private ZwSetValueKey(long ptr long long ptr long) NtSetValueKey
++@ stdcall -private ZwSetValueKey(long ptr long long ptr long)
+ @ stdcall -private ZwSetVolumeInformationFile(long ptr ptr long long) NtSetVolumeInformationFile
+ @ stdcall -private ZwTerminateJobObject(long long) NtTerminateJobObject
+ @ stdcall -private ZwTerminateProcess(long long) NtTerminateProcess

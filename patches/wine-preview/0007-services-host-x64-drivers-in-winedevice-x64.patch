@@ -1,0 +1,60 @@
+diff --git a/programs/services/services.c b/programs/services/services.c
+index 6f2b434..76941c3 100644
+--- a/programs/services/services.c
++++ b/programs/services/services.c
+@@ -824,25 +824,50 @@ static DWORD get_service_binary_path(const struct service_entry *service_entry,
+     return ERROR_SUCCESS;
+ }
+ 
++/* Return the image's machine type, or 0 on failure. */
++static USHORT get_image_machine(const WCHAR *path)
++{
++    SECTION_IMAGE_INFORMATION info;
++    HANDLE file, mapping;
++    NTSTATUS status;
++
++    file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
++    if (file == INVALID_HANDLE_VALUE) return 0;
++    status = NtCreateSection(&mapping, STANDARD_RIGHTS_REQUIRED | SECTION_QUERY, NULL, NULL,
++                             PAGE_READONLY, SEC_IMAGE, file);
++    CloseHandle(file);
++    if (status) return 0;
++    status = NtQuerySection(mapping, SectionImageInformation, &info, sizeof(info), NULL);
++    CloseHandle(mapping);
++    return status ? 0 : info.Machine;
++}
++
+ static DWORD get_winedevice_binary_path(struct service_entry *service_entry, WCHAR **path, BOOL *is_wow64)
+ {
+     WCHAR system_dir[MAX_PATH];
+-    DWORD type;
++    const WCHAR *host = L"\\winedevice.exe";
++    USHORT machine = get_image_machine(*path);
+ 
+     if (!is_win64)
+         *is_wow64 = FALSE;
+-    else if (GetBinaryTypeW(*path, &type))
+-        *is_wow64 = (type == SCS_32BIT_BINARY);
++    else if (machine)
++        *is_wow64 = (machine == IMAGE_FILE_MACHINE_I386 || machine == IMAGE_FILE_MACHINE_ARMNT);
+     else
+         *is_wow64 = service_entry->is_wow64;
+ 
++#ifdef __aarch64__
++    /* Native ARM64 and emulated x64 drivers need a host of their own architecture. */
++    if (machine == IMAGE_FILE_MACHINE_AMD64) host = L"\\winedevice-x64.exe";
++#endif
++    TRACE("driver %s machine %#x host %s\n", debugstr_w(*path), machine, debugstr_w(host));
++
+     GetSystemDirectoryW(system_dir, MAX_PATH);
+     free(*path);
+-    if (!(*path = malloc(wcslen(system_dir) * sizeof(WCHAR) + sizeof(L"\\winedevice.exe"))))
++    if (!(*path = malloc((wcslen(system_dir) + wcslen(host) + 1) * sizeof(WCHAR))))
+        return ERROR_NOT_ENOUGH_SERVER_MEMORY;
+ 
+     lstrcpyW(*path, system_dir);
+-    lstrcatW(*path, L"\\winedevice.exe");
++    lstrcatW(*path, host);
+     return ERROR_SUCCESS;
+ }
+ 

@@ -1,0 +1,162 @@
+diff --git a/configure.ac b/configure.ac
+index d8dd00b..ea09413 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3342,6 +3342,7 @@ WINE_CONFIG_MAKEFILE(dlls/wbemdisp)
+ WINE_CONFIG_MAKEFILE(dlls/wbemdisp/tests)
+ WINE_CONFIG_MAKEFILE(dlls/wbemprox)
+ WINE_CONFIG_MAKEFILE(dlls/wbemprox/tests)
++WINE_CONFIG_MAKEFILE(dlls/wdfldr.sys)
+ WINE_CONFIG_MAKEFILE(dlls/wdscore)
+ WINE_CONFIG_MAKEFILE(dlls/webservices)
+ WINE_CONFIG_MAKEFILE(dlls/webservices/tests)
+diff --git a/dlls/wdfldr.sys/Makefile.in b/dlls/wdfldr.sys/Makefile.in
+new file mode 100644
+index 0000000..29a607e
+--- /dev/null
++++ b/dlls/wdfldr.sys/Makefile.in
+@@ -0,0 +1,4 @@
++MODULE = wdfldr.sys
++IMPORTS = ntoskrnl ntdll
++EXTRADLLFLAGS = -Wl,--subsystem,native
++SOURCES = wdfldr.c wdfldr.sys.spec
+diff --git a/dlls/wdfldr.sys/wdfldr.c b/dlls/wdfldr.sys/wdfldr.c
+new file mode 100644
+index 0000000..3f09343
+--- /dev/null
++++ b/dlls/wdfldr.sys/wdfldr.c
+@@ -0,0 +1,122 @@
++/*
++ * Kernel-Mode Driver Framework loader: binds KMDF 1.15 client drivers.
++ *
++ * Supports drivers that bind KMDF but use only WDM APIs. Framework calls raise
++ * STATUS_NOT_IMPLEMENTED. ABI definitions come from Microsoft's public headers:
++ * https://github.com/microsoft/Windows-Driver-Frameworks
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#include <stdarg.h>
++#include "ntstatus.h"
++#define WIN32_NO_STATUS
++#include "windef.h"
++#include "winbase.h"
++#include "winternl.h"
++#include "ddk/wdm.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(wdfldr);
++
++/* Size of the KMDF 1.15 function table. */
++#define WDF_FUNCTION_COUNT 444
++#define WDF_GLOBALS_TAG    0x66446457  /* 'WdDf' */
++
++struct wdf_version { ULONG major, minor, build; };
++
++struct wdf_bind_info
++{
++    ULONG size;
++    WCHAR *component;
++    struct wdf_version version;
++    ULONG count;
++    void **table;
++    void *module;
++};
++
++struct wdf_globals
++{
++    void *driver;
++    ULONG flags, tag;
++    char name[32];
++    BOOLEAN displace_unload;
++};
++
++static DECLSPEC_NORETURN void unsupported( unsigned int index )
++{
++    ERR( "unimplemented KMDF function index %u\n", index );
++    RtlRaiseStatus( STATUS_NOT_IMPLEMENTED );
++}
++
++/* Expand M for every index in [0, WDF_FUNCTION_COUNT). */
++#define TENS(M, d) M(d##0) M(d##1) M(d##2) M(d##3) M(d##4) M(d##5) M(d##6) M(d##7) M(d##8) M(d##9)
++#define ALL_FUNCTIONS(M) \
++    TENS(M,)    TENS(M, 1)  TENS(M, 2)  TENS(M, 3)  TENS(M, 4)  TENS(M, 5)  TENS(M, 6)  TENS(M, 7)  \
++    TENS(M, 8)  TENS(M, 9)  TENS(M, 10) TENS(M, 11) TENS(M, 12) TENS(M, 13) TENS(M, 14) TENS(M, 15) \
++    TENS(M, 16) TENS(M, 17) TENS(M, 18) TENS(M, 19) TENS(M, 20) TENS(M, 21) TENS(M, 22) TENS(M, 23) \
++    TENS(M, 24) TENS(M, 25) TENS(M, 26) TENS(M, 27) TENS(M, 28) TENS(M, 29) TENS(M, 30) TENS(M, 31) \
++    TENS(M, 32) TENS(M, 33) TENS(M, 34) TENS(M, 35) TENS(M, 36) TENS(M, 37) TENS(M, 38) TENS(M, 39) \
++    TENS(M, 40) TENS(M, 41) TENS(M, 42) TENS(M, 43) M(440) M(441) M(442) M(443)
++
++#define STUB(n)  static void WINAPI unimplemented_##n(void) { unsupported( n ); }
++#define ENTRY(n) unimplemented_##n,
++ALL_FUNCTIONS(STUB)
++static void *functions[WDF_FUNCTION_COUNT] = { ALL_FUNCTIONS(ENTRY) };
++
++NTSTATUS WINAPI DriverEntry( DRIVER_OBJECT *driver, UNICODE_STRING *path )
++{
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI DllInitialize( UNICODE_STRING *path )
++{
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI DllUnload(void)
++{
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI WdfVersionBind( DRIVER_OBJECT *driver, UNICODE_STRING *path,
++                                struct wdf_bind_info *info, struct wdf_globals **out )
++{
++    struct wdf_globals *globals;
++
++    if (!info || info->size != sizeof(*info) || !out || !info->table) return STATUS_INVALID_PARAMETER;
++    TRACE( "driver %p path %s component %s version %lu.%lu.%lu count %lu table %p\n",
++           driver, debugstr_w(path->Buffer), debugstr_w(info->component), info->version.major,
++           info->version.minor, info->version.build, info->count, info->table );
++    if (info->version.major != 1 || info->version.minor != 15 || info->count != WDF_FUNCTION_COUNT)
++        return STATUS_REVISION_MISMATCH;
++    if (!(globals = ExAllocatePoolWithTag( NonPagedPool, sizeof(*globals), WDF_GLOBALS_TAG )))
++        return STATUS_NO_MEMORY;
++    memset( globals, 0, sizeof(*globals) );
++    globals->tag = WDF_GLOBALS_TAG;
++    globals->displace_unload = TRUE;
++    *(void ***)info->table = functions;
++    *out = globals;
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI WdfVersionUnbind( UNICODE_STRING *path, struct wdf_bind_info *info, struct wdf_globals *globals )
++{
++    TRACE( "globals %p\n", globals );
++    ExFreePool( globals );
++    return STATUS_SUCCESS;
++}
++
++NTSTATUS WINAPI WdfVersionBindClass( struct wdf_bind_info *info, struct wdf_globals *globals, void *class_info )
++{
++    FIXME( "unsupported class binding %p\n", class_info );
++    return STATUS_NOT_IMPLEMENTED;
++}
++
++NTSTATUS WINAPI WdfVersionUnbindClass( struct wdf_bind_info *info, struct wdf_globals *globals, void *class_info )
++{
++    return STATUS_NOT_IMPLEMENTED;
++}
+diff --git a/dlls/wdfldr.sys/wdfldr.sys.spec b/dlls/wdfldr.sys/wdfldr.sys.spec
+new file mode 100644
+index 0000000..6fe5f75
+--- /dev/null
++++ b/dlls/wdfldr.sys/wdfldr.sys.spec
+@@ -0,0 +1,6 @@
++@ stdcall DllInitialize(ptr)
++@ stdcall DllUnload()
++@ stdcall WdfVersionBind(ptr ptr ptr ptr)
++@ stdcall WdfVersionUnbind(ptr ptr ptr)
++@ stdcall WdfVersionBindClass(ptr ptr ptr)
++@ stdcall WdfVersionUnbindClass(ptr ptr ptr)

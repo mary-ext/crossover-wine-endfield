@@ -44,6 +44,26 @@ Taken from [`dawn-winery/dwproton-mirror#b816be489`](https://github.com/dawn-win
   - Reads the system clock only when converting a relative timeout to an absolute deadline.
   - Avoids an unused clock read for infinite waits and existing absolute deadlines; wait and wake behavior is unchanged.
 
+## `wine-preview/`
+
+For CrossOver Preview 20260821's ARM64 Wine 11.15 (see [experiments/fex](../experiments/fex/README.md)).
+`experiments/fex/build-wine.sh` applies shared patches first (`em-backports/0003–0015`,
+`em-backports/0017`, `misc/0009–0010`, `macos/0005`), then the series below.
+Guarded mutex support (`em-backports/0001–0002`) is already upstream.
+
+- `0000`: em-backports/0016 rebased.
+- `0001`: ARM64EC version of the misc/0009–0010 dispatcher workaround, with an x64 breakpoint page.
+- `0002`: bounds ARM64EC code-bitmap lookups and stack walks to prevent recursive faults in Unity backtraces.
+- `0003`: emulates native ARM64 driver reads of the shared-data page's kernel alias.
+- `0004`: trims trailing NULs from registry value names passed by the ARM64 ACE drivers.
+- `0005`: implements `IoGetBaseFileSystemDeviceObject`.
+- `0006`: exports `PsGetProcessWow64Process` on ARM64.
+- `0007`: hosts x64 drivers in `winedevice-x64.exe`.
+- `0008`: adds a KMDF 1.15 `wdfldr.sys` binding for ARM64 ACE-CORE drivers. All 444 framework
+  functions raise `STATUS_NOT_IMPLEMENTED`; none were called in the tested gameplay runs.
+- `0009`: traces IRPs (`+ntoskrnl`) and hard-error parameters (`warn+ntdll`).
+- `0010`: `macos/0003` rebased; avoids closing the MSync alert index on thread exit.
+
 ## MoltenVK
 
 Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.

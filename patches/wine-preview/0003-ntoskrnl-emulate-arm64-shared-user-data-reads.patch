@@ -1,0 +1,77 @@
+diff --git a/dlls/ntoskrnl.exe/instr.c b/dlls/ntoskrnl.exe/instr.c
+index 31e1e6e..2adf61c 100644
+--- a/dlls/ntoskrnl.exe/instr.c
++++ b/dlls/ntoskrnl.exe/instr.c
+@@ -32,6 +32,12 @@
+ 
+ #define KSHARED_USER_DATA_PAGE_SIZE 0x1000
+ 
++#if defined(__x86_64__) || defined(__aarch64__)
++/* keep in sync with dlls/ntdll/thread.c:thread_init */
++static const BYTE *wine_user_shared_data = (BYTE *)0x7ffe0000;
++static const BYTE *user_shared_data      = (BYTE *)0xfffff78000000000;
++#endif
++
+ #define CR0_PE 0x00000001 /* Protected Mode */
+ #define CR0_ET 0x00000010 /* Extension Type */
+ #define CR0_NE 0x00000020 /* Numeric Error */
+@@ -489,10 +495,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(int);
+ #define SIB_INDEX( sib, rex )   (((sib) >> 3) & 7) | (((rex) & REX_X) ? 8 : 0)
+ #define SIB_BASE( sib, rex )    (((sib) & 7) | (((rex) & REX_B) ? 8 : 0))
+ 
+-/* keep in sync with dlls/ntdll/thread.c:thread_init */
+-static const BYTE *wine_user_shared_data = (BYTE *)0x7ffe0000;
+-static const BYTE *user_shared_data      = (BYTE *)0xfffff78000000000;
+-
+ static inline DWORD64 *get_int_reg( CONTEXT *context, int index )
+ {
+     return &context->Rax + index; /* index should be in range 0 .. 15 */
+@@ -945,3 +947,35 @@ LONG CALLBACK vectored_handler( EXCEPTION_POINTERS *ptrs )
+ }
+ 
+ #endif  /* __x86_64__ */
++
++#if defined(__aarch64__) && !defined(__arm64ec__)
++WINE_DEFAULT_DEBUG_CHANNEL(int);
++
++/* Mirror the x86 kernel shared-data reads for native ARM64 drivers. */
++LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ptrs)
++{
++    EXCEPTION_RECORD *record = ptrs->ExceptionRecord;
++    CONTEXT *context = ptrs->ContextRecord;
++    UINT insn, size, rt, rn;
++    ULONG_PTR address, offset, value = 0, base;
++    if (record->ExceptionCode != EXCEPTION_ACCESS_VIOLATION ||
++        record->NumberParameters < 2 || record->ExceptionInformation[0] != EXCEPTION_READ_FAULT)
++        return EXCEPTION_CONTINUE_SEARCH;
++    insn = *(const UINT *)context->Pc;
++    /* LDR[BH] Wt/Xt, [Xn|SP, #imm12], unsigned immediate, integer only. */
++    if ((insn & 0x3fc00000) != 0x39400000) return EXCEPTION_CONTINUE_SEARCH;
++    size = 1u << (insn >> 30);
++    rt = insn & 31;
++    rn = (insn >> 5) & 31;
++    base = rn == 31 ? context->Sp : context->X[rn];
++    address = base + ((insn >> 10) & 0xfff) * size;
++    offset = address - (ULONG_PTR)user_shared_data;
++    if (address != record->ExceptionInformation[1] || offset > KSHARED_USER_DATA_PAGE_SIZE - size)
++        return EXCEPTION_CONTINUE_SEARCH;
++    memcpy(&value, wine_user_shared_data + offset, size);
++    if (rt != 31) context->X[rt] = value;
++    TRACE("ARM64 shared data offset %#Ix size %u pc %p\n", offset, size, (void *)context->Pc);
++    context->Pc += 4;
++    return EXCEPTION_CONTINUE_EXECUTION;
++}
++#endif
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 8bb0a07..d6979d0 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -5083,7 +5083,7 @@ BOOL WINAPI DllMain( HINSTANCE inst, DWORD reason, LPVOID reserved )
+     {
+     case DLL_PROCESS_ATTACH:
+         DisableThreadLibraryCalls( inst );
+-#if defined(__i386__) || defined(__x86_64__)
++#if defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)
+         handler = RtlAddVectoredExceptionHandler( TRUE, vectored_handler );
+ #endif
+         KeQueryTickCount( &count );  /* initialize the global KeTickCount */

@@ -1,0 +1,32 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index d72e58c..8bb0a07 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -5000,6 +5000,14 @@ NTSTATUS WINAPI KdChangeOption(ULONG option, ULONG in_size, PVOID in_buffer,
+     return STATUS_DEBUGGER_INACTIVE;
+ }
+ 
++NTSTATUS WINAPI KeCapturePersistentThreadState(CONTEXT *context, PKTHREAD thread, ULONG code,
++                                               ULONG param1, ULONG param2, ULONG param3, ULONG param4, void *addr)
++{
++    FIXME("%p %p %lu %lu %lu %lu %lu %p\n", context, thread, code, param1, param2, param3, param4, addr);
++
++    return STATUS_NOT_IMPLEMENTED;
++}
++
+ NTSTATUS WINAPI KdDisableDebugger(void)
+ {
+     FIXME(": stub.\n");
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 3fc3636..e1c6dea 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -550,7 +550,7 @@
+ @ stdcall KeBugCheck(long)
+ @ stdcall KeBugCheckEx(long long long long long)
+ @ stdcall KeCancelTimer(ptr)
+-@ stub KeCapturePersistentThreadState
++@ stdcall KeCapturePersistentThreadState(ptr ptr long long long long long ptr)
+ @ stdcall KeClearEvent(ptr)
+ @ stub KeConnectInterrupt
+ @ stub KeDcacheFlushCount

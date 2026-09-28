@@ -1,0 +1,32 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 4d0eb7f..54e9b6f 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -5142,3 +5142,14 @@ NTSTATUS WINAPI ZwDeleteValueKey( HANDLE key, const UNICODE_STRING *name )
+     if (!trim_value_name( name, &trimmed )) return STATUS_INVALID_PARAMETER;
+     return NtDeleteValueKey( key, &trimmed );
+ }
++
++#define FO_DIRECT_DEVICE_OPEN 0x00000800
++PDEVICE_OBJECT WINAPI IoGetBaseFileSystemDeviceObject(PFILE_OBJECT file)
++{
++    DEVICE_OBJECT *device = file->DeviceObject;
++    if (file->Vpb && file->Vpb->DeviceObject) device = file->Vpb->DeviceObject;
++    else if (!(file->Flags & FO_DIRECT_DEVICE_OPEN) && device && device->Vpb && device->Vpb->DeviceObject)
++        device = device->Vpb->DeviceObject;
++    TRACE("file %p -> device %p\n", file, device);
++    return device;
++}
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 5496bc8..44ef9c8 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -401,7 +401,7 @@
+ @ stdcall IoFreeWorkItem(ptr)
+ @ stdcall IoGetAttachedDevice(ptr)
+ @ stdcall IoGetAttachedDeviceReference(ptr)
+-@ stub IoGetBaseFileSystemDeviceObject
++@ stdcall IoGetBaseFileSystemDeviceObject(ptr)
+ @ stub IoGetBootDiskInformation
+ @ stdcall IoGetConfigurationInformation()
+ @ stdcall IoGetCurrentProcess()

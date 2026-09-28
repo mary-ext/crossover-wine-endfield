@@ -1,0 +1,20 @@
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 40a4591..73afa32 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -1394,6 +1394,7 @@ BOOLEAN WINAPI RtlIsEcCode( ULONG_PTR ptr )
+ {
+     const UINT64 *map = (const UINT64 *)NtCurrentTeb()->Peb->EcCodeBitMap;
+     ULONG_PTR page = ptr / page_size;
++    if (ptr >= 0x800000000000ull) return FALSE;
+     return (map[page / 64] >> (page & 63)) & 1;
+ }
+ 
+@@ -1847,6 +1848,7 @@ ULONG WINAPI RtlWalkFrameChain( void **buffer, ULONG count, ULONG flags )
+     for (i = 0; i < count; i++)
+     {
+         pc = context.Rip;
++        if (pc >= 0x800000000000ull) break;
+         if ((context.ContextFlags & CONTEXT_UNWOUND_TO_CALL) && RtlIsEcCode( pc )) pc -= 4;
+         func = RtlLookupFunctionEntry( pc, &base, &table );
+         if (RtlVirtualUnwind2( UNW_FLAG_NHANDLER, base, pc, func, &context, NULL,

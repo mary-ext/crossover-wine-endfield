@@ -1,0 +1,13 @@
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 44ef9c8..f670f54 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -939,7 +939,7 @@
+ @ stdcall PsGetProcessSessionId(ptr)
+ @ stub PsGetProcessWin32Process
+ @ stub PsGetProcessWin32WindowStation
+-@ stdcall -arch=x86_64 PsGetProcessWow64Process(ptr)
++@ stdcall -arch=win64 PsGetProcessWow64Process(ptr)
+ @ stub PsGetThreadFreezeCount
+ @ stub PsGetThreadHardErrorsAreDisabled
+ @ stdcall PsGetThreadId(ptr)

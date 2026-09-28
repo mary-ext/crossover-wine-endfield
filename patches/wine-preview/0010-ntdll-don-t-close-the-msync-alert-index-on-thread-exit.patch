@@ -1,0 +1,22 @@
+diff --git a/dlls/ntdll/unix/thread.c b/dlls/ntdll/unix/thread.c
+index 587ca13..a157c28 100644
+--- a/dlls/ntdll/unix/thread.c
++++ b/dlls/ntdll/unix/thread.c
+@@ -75,6 +75,7 @@
+ #include "wine/server.h"
+ #include "wine/debug.h"
+ #include "unix_private.h"
++#include "msync.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(thread);
+ WINE_DECLARE_DEBUG_CHANNEL(seh);
+@@ -1102,7 +1103,8 @@ static void contexts_from_server( CONTEXT *context, struct context_data server_c
+ static DECLSPEC_NORETURN void pthread_exit_wrapper( int status )
+ {
+     struct thread_data *data = get_thread_data();
+-    close( data->alert_fd );
++    /* With msync, alert_fd is a server-owned shared-memory index, not a Unix fd. */
++    if (!do_msync()) close( data->alert_fd );
+     close( data->wait_fd[0] );
+     close( data->wait_fd[1] );
+     close( data->reply_fd );

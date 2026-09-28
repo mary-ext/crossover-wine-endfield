@@ -1,0 +1,44 @@
+diff --git a/dlls/ntdll/unix/system.c b/dlls/ntdll/unix/system.c
+index 85b5290..d3c058c 100644
+--- a/dlls/ntdll/unix/system.c
++++ b/dlls/ntdll/unix/system.c
+@@ -5023,7 +5023,12 @@ NTSTATUS WINAPI NtRaiseHardError( NTSTATUS status, ULONG count,
+                                   ULONG params_mask, void **params,
+                                   HARDERROR_RESPONSE_OPTION option, HARDERROR_RESPONSE *response )
+ {
++    ULONG i;
++
+     FIXME( "%#08x %u %#x %p %u %p: stub\n", status, count, params_mask, params, option, response );
++    /* Set mask bits identify UNICODE_STRING parameters. */
++    for (i = 0; i < count && i < 32; i++)
++        if (params_mask & (1u << i)) WARN( "parameter %u: %s\n", i, debugstr_us( params[i] ));
+     return STATUS_NOT_IMPLEMENTED;
+ }
+ 
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 54e9b6f..a0feb68 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -477,6 +477,7 @@ static NTSTATUS WINAPI dispatch_irp_completion( DEVICE_OBJECT *device, IRP *irp,
+ 
+     EnterCriticalSection( &irp_completion_cs );
+ 
++    TRACE( "irp %p status %#lx info %Iu\n", irp, irp->IoStatus.Status, irp->IoStatus.Information );
+     irp_data->complete = TRUE;
+     if (!irp_data->async)
+     {
+@@ -535,6 +536,14 @@ static NTSTATUS dispatch_irp( DEVICE_OBJECT *device, IRP *irp, struct dispatch_c
+ 
+     KeQueryTickCount( &count );  /* update the global KeTickCount */
+ 
++    if (TRACE_ON(ntoskrnl))
++    {
++        IO_STACK_LOCATION *irpsp = IoGetNextIrpStackLocation( irp );
++        BOOL ioctl = irpsp->MajorFunction == IRP_MJ_DEVICE_CONTROL
++                     || irpsp->MajorFunction == IRP_MJ_INTERNAL_DEVICE_CONTROL;
++        TRACE( "irp %p driver %s major %#x code %#lx\n", irp, debugstr_us(&device->DriverObject->DriverName),
++               irpsp->MajorFunction, ioctl ? irpsp->Parameters.DeviceIoControl.IoControlCode : 0 );
++    }
+     device->CurrentIrp = irp;
+     KeEnterCriticalRegion();
+     status = IoCallDriver( device, irp );
