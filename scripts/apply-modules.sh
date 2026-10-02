@@ -5,6 +5,7 @@
 # Env:
 #   SRC_APP   CrossOver to copy (default /Applications/CrossOver.app)
 #   DEST_APP  patched copy to create, replacing any existing one (default /Applications/CrossOver_Endfield_Patch.app)
+#   APP_NAME  name shown in the menu bar and Dock (default "CrossOver Endfield")
 #   FORCE=1   apply even if the modules were built for a different CrossOver version
 
 set -euo pipefail
@@ -12,6 +13,11 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 MODULES="${1:-$REPO/dist/endfield-wine-modules}"
 SRC_APP="${SRC_APP:-/Applications/CrossOver.app}"
 DEST_APP="${DEST_APP:-/Applications/CrossOver_Endfield_Patch.app}"
+APP_NAME="${APP_NAME:-CrossOver Endfield}"
+# Distinct ID for the patched app; keep the stock length for in-place binary replacement.
+STOCK_ID=com.codeweavers.CrossOver
+BUNDLE_ID=com.codeweavers.CXPatched
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 log(){  printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 ok(){   printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
@@ -74,6 +80,52 @@ sign_components() {
     "$CXR/CrossOver-Hosted Application/wineserver"
 }
 
+rebrand_app() {
+  local plist="$DEST_APP/Contents/Info.plist"
+  log "Setting name \"$APP_NAME\" and bundle ID $BUNDLE_ID"
+  plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$plist"
+  plutil -replace CFBundleName -string "$APP_NAME" "$plist"
+  plutil -replace CFBundleDisplayName -string "$APP_NAME" "$plist"
+  # Prevent Sparkle from overwriting the patches. Install policy belongs in Info.plist;
+  # update checks are disabled in user defaults below.
+  plutil -replace SUAllowsAutomaticUpdates -bool NO "$plist"
+}
+
+migrate_prefs() {
+  log "Updating $BUNDLE_ID preferences"
+  if ! defaults read "$BUNDLE_ID" >/dev/null 2>&1 && defaults export "$STOCK_ID" "$work/prefs.plist" 2>/dev/null; then
+    defaults import "$BUNDLE_ID" "$work/prefs.plist"
+    ok "copied sign-in and settings from $STOCK_ID"
+  fi
+  defaults write "$BUNDLE_ID" SUEnableAutomaticChecks -bool false
+  ok "automatic update checks disabled"
+}
+
+# Launchers find CrossOver by the bundle ID embedded in these templates.
+patch_launcher_templates() {
+  local name dir exe archive
+  log "Pointing app launcher templates at $BUNDLE_ID"
+  for name in "Menu Helper" "Bottle Helper"; do
+    dir="$work/$name"
+    exe="$dir/Contents/MacOS/$name"
+    archive="$DEST_APP/Contents/Resources/$name.cpbz2"
+    mkdir "$dir"
+    ( cd "$dir" && bzip2 -dc "$archive" | cpio -idm --quiet )
+    OLD="$STOCK_ID" NEW="$BUNDLE_ID" perl -0777 -pi -e \
+      '$n += s/\0\Q$ENV{OLD}\E\0/\0$ENV{NEW}\0/g; END { exit !$n }' "$exe" \
+      || die "$name: $STOCK_ID literal not found"
+    # Sign outside the bundle: CrossOver rewrites Info.plist when creating launchers.
+    mv "$exe" "$work/exe"
+    codesign --force --sign - --preserve-metadata=identifier,entitlements,flags "$work/exe"
+    mv "$work/exe" "$exe"
+    ( cd "$dir" && find . | cpio -o --format odc --quiet ) | bzip2 > "$archive"
+    ok "$name"
+  done
+  # Clear the migrated version to force launcher rebuilds from the patched templates.
+  defaults delete "$BUNDLE_ID" LastHelperVersion 2>/dev/null || true
+  ok "app launchers will rebuild on next launch"
+}
+
 # Re-sign the bundle: macOS can reject unsealed copies tagged with com.apple.provenance.
 seal_app() {
   log "Signing app bundle"
@@ -87,12 +139,19 @@ seal_app() {
   ok "bundle signature valid"
 }
 
+register_app() {
+  log "Registering $BUNDLE_ID with LaunchServices"
+  "$LSREGISTER" -f "$DEST_APP"
+  ok "registered"
+}
+
 check_inputs
 CXR="$DEST_APP/Contents/SharedSupport/CrossOver"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 
 # Read the original wineserver's hardened-runtime entitlements before replacing it.
-ents="$(mktemp)"
-trap 'rm -f "$ents"' EXIT
+ents="$work/wineserver.entitlements"
 codesign -d --xml --entitlements "$ents" \
   "$SRC_APP/Contents/SharedSupport/CrossOver/CrossOver-Hosted Application/wineserver" \
   2>/dev/null || die "cannot read wineserver entitlements"
@@ -100,7 +159,11 @@ codesign -d --xml --entitlements "$ents" \
 copy_app
 install_components
 sign_components
+rebrand_app
+migrate_prefs
+patch_launcher_templates
 seal_app
+register_app
 
 cat <<EOF
 
