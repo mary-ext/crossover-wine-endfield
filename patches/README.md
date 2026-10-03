@@ -67,6 +67,9 @@ Guarded mutex support (`em-backports/0001–0002`) is already upstream.
   The renamed host otherwise shows a "Program Error" dialog when ACE-BASE faults.
 - `0012`: commits only populated ARM64EC code-map pages, preventing memory scans from faulting
   in up to 4 GiB of zero pages on macOS. The full map remains readable for host code-range lookups.
+- `0013`: uses `mincore()` to return zeros for untouched `NtAllocateVirtualMemory` pages in
+  same-process `NtReadVirtualMemory`, preventing memory scans from making those pages resident on macOS.
+- `0014`: `macos/0002` ported to Preview's `NtDelayExecution`; fixes a CPU spin on the game's `INT64_MIN` timeout.
 
 ## MoltenVK
 

@@ -1,0 +1,47 @@
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -2319,6 +2319,20 @@
+ }
+ 
+ 
++/* Darwin rejects select() timeouts over 10^8 seconds with EINVAL.
++ * Attempt one bounded wait; return TRUE if the caller must recompute the remaining time. */
++static BOOL select_max_timeout( timeout_t diff_us, struct timeval *tv )
++{
++    static const time_t max_sec = 86400;
++
++    if (diff_us / 1000000 < max_sec) return FALSE;
++    tv->tv_sec = max_sec;
++    tv->tv_usec = 0;
++    select( 0, NULL, NULL, NULL, tv );
++    return TRUE;
++}
++
++
+ /******************************************************************************
+  *		NtQueryTimer (NTDLL.@)
+  */
+@@ -2512,8 +2526,14 @@
+ 
+         if ((when = timeout->QuadPart) < 0)
+         {
++            timeout_t duration = -(timeout->QuadPart + 1);  /* duration - 1 avoids negating INT64_MIN */
++
+             NtQuerySystemTime( &now );
+-            when = now.QuadPart - when;
++            if (duration >= TIMEOUT_INFINITE - now.QuadPart)  /* unrepresentable deadline */
++            {
++                for (;;) select( 0, NULL, NULL, NULL, NULL );
++            }
++            when = now.QuadPart + duration + 1;
+         }
+ 
+         /* Note that we yield after establishing the desired timeout, but
+@@ -2527,6 +2547,7 @@
+             NtQuerySystemTime( &now );
+             diff = (when - now.QuadPart + 9) / 10;
+             if (diff <= 0) break;
++            if (select_max_timeout( diff, &tv )) continue;
+             tv.tv_sec  = diff / 1000000;
+             tv.tv_usec = diff % 1000000;
+             if (select( 0, NULL, NULL, NULL, &tv ) != -1) break;

@@ -37,9 +37,10 @@ experiments/fex/run.sh
 
 ## Status and known issues
 
-Tested on an M5 Pro at Very High settings, 2056×1329 and a 120 FPS cap (2026-10-03). Gameplay reached roughly 94–114 FPS in tested areas, comparable to earlier Rosetta runs. Sessions up to 16 minutes included teleports and exited normally without ACE warnings.
+Tested on an M5 Pro at Very High settings, 2056×1329 and a 120 FPS cap (2026-10-03). Gameplay reached roughly 96–118 FPS in tested areas, comparable to earlier Rosetta runs. Sessions up to 16 minutes included teleports and exited normally without ACE warnings.
 
-- Memory use remains higher than Rosetta: about 14–16 GB in tested areas, versus about 8–9 GB for Rosetta at the measured spawn point.
+- Setup sets `FEX_HOSTFEATURES=disableafp`. Calls into Wine's native ARM64EC DLLs take about one-fifth the time by avoiding two FPCR writes (~9 ns each). Scalar SSE code slows down; gameplay FPS is similar, but map and menu hitches are 14–17% shorter.
+- Memory use after loading is about 10 GB, down from 16 GB before patch `0013`, and reaches 12 GB after touring four regions. Rosetta uses about 8–9 GB at the measured spawn point.
 - Shader compilation can take several minutes on first launch.
 
 ## Patches

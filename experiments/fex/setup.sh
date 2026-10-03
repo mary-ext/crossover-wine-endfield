@@ -66,6 +66,7 @@ cmd_bottle() {
     --param Bottle:Preview=1 \
     --param EnvironmentVariables:WINEMSYNC=1 \
     --param EnvironmentVariables:FEX_HIDEHYPERVISORBIT=1 \
+    --param EnvironmentVariables:FEX_HOSTFEATURES=disableafp \
     --param EnvironmentVariables:MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0 >/dev/null
   "$CXR/bin/wineserver-arm64" -w
   ok "$PREFIX"

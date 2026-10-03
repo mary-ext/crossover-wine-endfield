@@ -1,0 +1,144 @@
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -3685,7 +3685,33 @@
+     }
+     return anon_mmap_alloc( size, PROT_READ | PROT_WRITE );
+ }
++
++#ifdef __APPLE__
++/* Never-touched pages of anonymous memory: neither resident nor compressed/swapped. */
++#define MINCORE_UNTOUCHED(vec) (((vec) & (MINCORE_ANONYMOUS | MINCORE_INCORE | MINCORE_PAGED_OUT)) == MINCORE_ANONYMOUS)
++
++static BOOL use_mincore_reads;
++
++/* Check that mincore() reports one entry per host page and identifies untouched pages. */
++static void init_mincore_reads(void)
++{
++    char vec[64];
++    size_t count = ARRAY_SIZE(vec), size = count * host_page_size;
++    char *p;
+ 
++    if ((p = mmap( NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0 )) == MAP_FAILED) return;
++    memset( vec, 0xff, sizeof(vec) );
++    /* the kernel may materialize several host pages at once, so only check distant pages */
++    p[count / 2 * host_page_size] = 1;
++    if (!mincore( p, size, vec ))
++        use_mincore_reads = MINCORE_UNTOUCHED( vec[0] ) && !MINCORE_UNTOUCHED( vec[count / 2] ) &&
++                            MINCORE_UNTOUCHED( vec[count - 1] );
++    munmap( p, size );
++    TRACE( "untouched page detection %s\n", use_mincore_reads ? "enabled" : "unavailable" );
++}
++#endif
++
++
+ /***********************************************************************
+  *           virtual_init
+  */
+@@ -3707,6 +3733,9 @@
+     host_page_mask = host_page_size - 1;
+     TRACE( "host page size: %uk\n", (UINT)host_page_size / 1024 );
+ #endif
++#ifdef __APPLE__
++    init_mincore_reads();
++#endif
+ 
+ #ifdef _WIN64
+     host_addr_space_limit = get_host_addr_space_limit();
+@@ -6998,6 +7027,88 @@
+ 
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
+     return status;
++}
++
++
++
++/***********************************************************************
++ *           read_self_memory
++ *
++ * Return zeros for untouched NtAllocateVirtualMemory pages without faulting them in on macOS.
++ * mincore() is a snapshot: concurrent writes or frees may not be reflected in the copy.
++ * Other pages use a normal copy to preserve access faults.
++ */
++static void read_self_memory( void *buffer, const void *addr, SIZE_T size )
++{
++#ifdef __APPLE__
++    enum { MAX_RUN = 256 };
++    const BYTE mask = VPROT_COMMITTED | VPROT_READ | VPROT_GUARD;
++    UINT_PTR src = (UINT_PTR)addr, end = src + size, dst = (UINT_PTR)buffer;
++
++    if (!use_mincore_reads || end < src || dst + size < dst ||
++        (dst < end && dst + size > src))  /* overlapping copies keep memmove semantics */
++    {
++        memmove( buffer, addr, size );
++        return;
++    }
++
++    while (src < end)
++    {
++        UINT_PTR run = (UINT_PTR)ROUND_ADDR( src, host_page_mask ), run_end, p, pending;
++        char vec[MAX_RUN];
++        struct file_view *view;
++        sigset_t sigset;
++        size_t i, count;
++        BOOL untouched = FALSE;
++        BYTE vprot;
++
++        run_end = end - run > MAX_RUN * host_page_size ? run + MAX_RUN * host_page_size : end;
++        count = ROUND_SIZE( run, run_end - run, host_page_mask ) / host_page_size;
++        if (!mincore( (void *)run, count * host_page_size, vec ))
++            for (i = 0; i < count && !untouched; i++) untouched = MINCORE_UNTOUCHED( vec[i] );
++
++        if (untouched)
++        {
++            server_enter_uninterrupted_section( &virtual_mutex, &sigset );
++            if ((view = find_view( (void *)run, 0 )) && is_view_valloc( view ) && !(view->protect & VPROT_SYSTEM))
++            {
++                UINT_PTR view_end = (UINT_PTR)view->base + view->size;
++                if (run_end > view_end) run_end = view_end;
++                for (i = 0, p = run; p < run_end; i++, p += host_page_size)
++                    if (MINCORE_UNTOUCHED( vec[i] ) &&
++                        (get_vprot_range_size( (char *)p, host_page_size, mask, &vprot ) != host_page_size ||
++                         (vprot & mask) != (VPROT_COMMITTED | VPROT_READ)))
++                        vec[i] = MINCORE_INCORE;  /* copy to preserve access faults */
++            }
++            else untouched = FALSE;
++            server_leave_uninterrupted_section( &virtual_mutex, &sigset );
++        }
++
++        if (!untouched)
++        {
++            memcpy( (char *)dst, (const char *)src, run_end - src );
++            dst += run_end - src;
++            src = run_end;
++            continue;
++        }
++
++        for (pending = src, i = 0, p = run; p < run_end; i++, p += host_page_size)
++        {
++            UINT_PTR from = src > p ? src : p, to = p + host_page_size < run_end ? p + host_page_size : run_end;
++
++            if (!MINCORE_UNTOUCHED( vec[i] )) continue;
++            memcpy( (char *)dst, (const char *)pending, from - pending );
++            memset( (char *)dst + (from - pending), 0, to - from );
++            dst += to - pending;
++            pending = to;
++        }
++        memcpy( (char *)dst, (const char *)pending, run_end - pending );
++        dst += run_end - pending;
++        src = run_end;
++    }
++#else
++    memmove( buffer, addr, size );
++#endif
+ }
+ 
+ 
+@@ -7019,7 +7130,7 @@
+     {
+         __TRY
+         {
+-            memmove( buffer, addr, size );
++            read_self_memory( buffer, addr, size );
+             status = STATUS_SUCCESS;
+         }
+         __EXCEPT
