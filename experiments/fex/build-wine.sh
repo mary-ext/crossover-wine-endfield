@@ -30,7 +30,7 @@ LLVM_MINGW_SHA256=52e5f5a7b131021d0c39a37a38fa380a1da7885cd04bd61afd0cd4ecfb8bc1
 TOOLCHAIN="$BUILD_DIR/$LLVM_MINGW/bin"
 MODULES="dlls/ntdll/ntdll.so dlls/ntdll/aarch64-windows/ntdll.dll dlls/kernel32/aarch64-windows/kernel32.dll
   dlls/ntoskrnl.exe/aarch64-windows/ntoskrnl.exe dlls/wdfldr.sys/aarch64-windows/wdfldr.sys
-  programs/services/aarch64-windows/services.exe"
+  programs/services/aarch64-windows/services.exe programs/winedbg/aarch64-windows/winedbg.exe"
 BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
 export MACOSX_DEPLOYMENT_TARGET=14.0
 

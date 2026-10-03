@@ -63,6 +63,10 @@ Guarded mutex support (`em-backports/0001–0002`) is already upstream.
   functions raise `STATUS_NOT_IMPLEMENTED`; none were called in the tested gameplay runs.
 - `0009`: traces IRPs (`+ntoskrnl`) and hard-error parameters (`warn+ntdll`).
 - `0010`: `macos/0003` rebased; avoids closing the MSync alert index on thread exit.
+- `0011`: extends winedbg's crash-dialog exemption for `winedevice.exe` to `winedevice-x64.exe`.
+  The renamed host otherwise shows a "Program Error" dialog when ACE-BASE faults.
+- `0012`: commits only populated ARM64EC code-map pages, preventing memory scans from faulting
+  in up to 4 GiB of zero pages on macOS. The full map remains readable for host code-range lookups.
 
 ## MoltenVK
 

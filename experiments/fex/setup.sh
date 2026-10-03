@@ -92,19 +92,25 @@ cmd_bottle() {
   "$CXR/bin/wineserver-arm64" -w
 }
 
-# Patch the hypervisor CPUID leaf handlers of Preview 20260821's FEX build (FEX-2604-755-g80951b9).
+# Patch Preview 20260821's FEX build (FEX-2604-755-g80951b9). File offsets equal RVAs in this image.
 XTAJIT_STOCK=fc0f0a37cf15de065ff54e49a11ef37cc05a286a0962f7449dfb632da9da25e7
-XTAJIT_PATCHED=d05daeb158e5172d1ecc22c942d111f05525108c81de2da979cf9176a36373f0
+XTAJIT_CPUID_ONLY=d05daeb158e5172d1ecc22c942d111f05525108c81de2da979cf9176a36373f0
+XTAJIT_PATCHED=ae4e6345276ac9dde65a054b7ce8184dcffe83d60337ae091b8a7bb850317311
+sha256(){ shasum -a 256 "$1" | cut -d' ' -f1; }
+# poke FILE OFFSET BYTES (printf %b escapes).
+poke(){ printf '%b' "$3" | dd of="$1" bs=1 seek=$(($2)) conv=notrunc 2>/dev/null; }
 patch_xtajit() {
   local f="$1" sum ret0='\x00\x00\x80\xd2\x01\x00\x80\xd2\xc0\x03\x5f\xd6'  # mov x0,#0; mov x1,#0; ret
-  sum="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+  sum="$(sha256 "$f")"
   [ "$sum" = "$XTAJIT_PATCHED" ] && return
-  [ "$sum" = "$XTAJIT_STOCK" ] || die "unknown xtajit64.dll build: $f"
-  [ -f "$STOCK/xtajit64.dll" ] || cp "$f" "$STOCK/xtajit64.dll"
-  # Function_4000_0000h and Function_4000_0001h; file offsets equal RVAs in this image.
-  printf '%b' "$ret0" | dd of="$f" bs=1 seek=$((0x1e8d0)) conv=notrunc 2>/dev/null
-  printf '%b' "$ret0" | dd of="$f" bs=1 seek=$((0x1e8f8)) conv=notrunc 2>/dev/null
-  [ "$(shasum -a 256 "$f" | cut -d' ' -f1)" = "$XTAJIT_PATCHED" ] || die "xtajit64.dll patch failed: $f"
+  [ "$sum" = "$XTAJIT_STOCK" ] || [ "$sum" = "$XTAJIT_CPUID_ONLY" ] || die "unknown xtajit64.dll build: $f"
+  if [ "$sum" = "$XTAJIT_STOCK" ] && [ ! -f "$STOCK/xtajit64.dll" ]; then cp "$f" "$STOCK/xtajit64.dll"; fi
+  # Function_4000_0000h and Function_4000_0001h return zeros.
+  poke "$f" 0x1e8d0 "$ret0"
+  poke "$f" 0x1e8f8 "$ret0"
+  # OvercommitTracker::HandleAccessViolation: b.ne -> b to select the non-Wine path.
+  poke "$f" 0x4898 '\x16\x00\x00\x14'
+  [ "$(sha256 "$f")" = "$XTAJIT_PATCHED" ] || die "xtajit64.dll patch failed: $f"
 }
 
 # install_file SRC DEST STOCK_NAME: saves the original once, then replaces it.
@@ -141,7 +147,7 @@ cmd_install() {
   # Wine loads the bottle copy; patch the app copy for new bottles too.
   patch_xtajit "$CXR/lib/wine/aarch64-windows/xtajit64.dll"
   patch_xtajit "$PREFIX/drive_c/windows/system32/xtajit64.dll"
-  ok "xtajit64.dll (hypervisor CPUID leaves hidden)"
+  ok "xtajit64.dll (CPUID and overcommit patches)"
   # x64 drivers need an x64 host; wine-preview/0007 selects winedevice-x64.exe for them.
   cp "$CXR/lib/wine/x86_64-windows/winedevice.exe" "$PREFIX/drive_c/windows/system32/winedevice-x64.exe"
   ok "winedevice-x64.exe"

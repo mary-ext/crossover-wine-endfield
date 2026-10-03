@@ -1,0 +1,14 @@
+diff --git a/programs/winedbg/crashdlg.c b/programs/winedbg/crashdlg.c
+index f3ea0e7..96ec74d 100644
+--- a/programs/winedbg/crashdlg.c
++++ b/programs/winedbg/crashdlg.c
+@@ -369,7 +369,8 @@ int display_crash_dialog(void)
+     hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, dbg_curr_pid);
+     g_ProgramName = get_program_name(hProcess);
+     CloseHandle(hProcess);
+-    if (!wcscmp( g_ProgramName, L"winedevice.exe" )) return TRUE;
++    if (!wcscmp( g_ProgramName, L"winedevice.exe" ) ||
++        !wcscmp( g_ProgramName, L"winedevice-x64.exe" )) return TRUE;
+     InitCommonControlsEx( &init );
+     return DialogBoxW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDD_CRASH_DLG), NULL, crash_dlg_proc);
+ }

@@ -1,0 +1,22 @@
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index c60094e..1c44156 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -2833,12 +2833,16 @@ static void alloc_arm64ec_map(void)
+     SIZE_T size = ((ULONG_PTR)address_space_limit + page_size) >> (page_shift + 3);  /* one bit per page */
+ 
+     size = ROUND_SIZE( 0, size, host_page_mask );
+-    status = map_view( &arm64ec_view, NULL, size, MEM_TOP_DOWN, VPROT_READ | VPROT_COMMITTED, 0, 0, 0 );
++    /* Leave unused pages uncommitted so memory scanners skip them; on macOS, reads of
++     * unwritten pages allocate physical memory. Keep the host mapping readable because
++     * code-range lookups can access any map entry. */
++    status = map_view( &arm64ec_view, NULL, size, MEM_TOP_DOWN, VPROT_READ, 0, 0, 0 );
+     if (status)
+     {
+         ERR( "failed to allocate ARM64EC map: %08x\n", status );
+         exit(1);
+     }
++    mprotect( arm64ec_view->base, arm64ec_view->size, PROT_READ );
+     peb->EcCodeBitMap = arm64ec_view->base;
+ }
+ 

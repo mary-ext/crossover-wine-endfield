@@ -54,8 +54,14 @@ Wine patch details and application order are in the
 - Patches FEX's `xtajit64.dll` to hide the hypervisor CPUID leaves. ACE terminates the game
   (exit status 222) when CPUID reports a hypervisor. `FEX_HIDEHYPERVISORBIT=1` clears leaf 1's
   bit, but leaves `0x40000000`/`0x40000001` still report `FEXIFEXIEMU` and FEX's version.
-  The patch makes both handlers return zeros, as Rosetta does. SHA-256 checks restrict it to
-  the expected stock or patched build. CodeWeavers' FEX fork is not public.
+  The patch makes both handlers return zeros, as Rosetta does. SHA-256 checks accept only the
+  pinned build, including copies patched by earlier setup runs. CodeWeavers' FEX fork is not public.
+- Patches FEX's overcommit fault handler (`OvercommitTracker::HandleAccessViolation`) to take
+  its non-Wine path: commit up to 64 KiB at the faulting page instead of the whole reservation.
+  Each emulated thread reserves a 272 MiB lookup cache, of which only the 16 MiB L1 is used
+  with the default `DisableL2Cache`. The Wine path committed all of it on the first L1 touch.
+  On macOS, reads of unwritten committed pages allocate physical memory. Apparent memory scans
+  during gameplay pushed these caches past 30 GB across about 190 threads.
 - Registers the game's x64 `ACE-BASE.sys`. The ARM64 ACE installer registers only native
   CORE drivers, but the x64 game also opens ACE-BASE (error `13-131078-288` if absent).
 
@@ -73,11 +79,25 @@ teleports included), each exiting normally. Mean FPS over two slow 360° spins a
 Without MSync, wineserver used 81% CPU on wait round trips. The Rosetta results use earlier
 sessions and builds; these measurements don't establish a speedup.
 
+Memory use (`footprint`) and map-open frame times, measured at Dijiang Kernel Sector spawn
+over 13 map opens per run:
+
+| Build | After world load | After 7 opens | After 13 opens | Worst frame, map open (1st / later) |
+| --- | ---: | ---: | ---: | ---: |
+| Rosetta | 8.6 GB | 8.3 GB | | 262 / 58–71 ms |
+| FEX, no memory patches | 26 GB | 47 GB | 54 GB | 183 / 92–108 ms |
+| FEX, overcommit patch | 17 GB | 17 GB | 18 GB | 175 / 83–92 ms |
+| FEX, overcommit patch + wine-preview `0012` | 14 GB | 14 GB | 14 GB | 175 / 83–96 ms |
+
+With both memory patches, FEX reached 16 GB after a teleport to Wuling City (PAC, 102–103 FPS).
+Mean FPS during spins at spawn stayed at 110–114 across all FEX builds.
+
 ## Known issues
 
-- ACE-BASE faults on an `IN EAX,DX` at startup ("Unhandled privileged instruction"), and Wine
-  shows a `winedevice-x64.exe` "Program Error" dialog. Dismiss it: the host and the driver stay
-  loaded and play continues. Rosetta logs the same fault without a dialog; the difference is
-  not yet understood.
-- High memory use under FEX (50+ GB HUD App memory in gameplay).
+- ACE-BASE runs a VMware backdoor probe (`IN EAX,DX` on port `0x5658`) during login, which
+  faults ("Unhandled privileged instruction") under both FEX and Rosetta, terminating the driver
+  host. Gameplay continues with the fault unhandled; emulating an empty port terminates the game
+  at login. See [wine-preview `0011`](../../patches/README.md#wine-preview) for the dialog fix.
+- FEX uses about 5 GB of dirty memory in top-down allocations (L1 lookup caches, JIT code and
+  FEX's heap; individual contributions unmeasured), plus about 1 GB more game memory than Rosetta.
 - Shader compilation can take several minutes on first launch.
