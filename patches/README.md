@@ -29,7 +29,7 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
 - `0007`, `0008`:
   - Defers unmapping section views while a locked MDL maps them; calls `PsGetContextThread` through a thunk.
 
-The `_dw` `PsGetProcessExitStatus` stub (`d077b3f5c3`) is replaced by `macos/0005`.
+The `_dw` `PsGetProcessExitStatus` stub (`d077b3f5c3`) is replaced by `macos/0005`; the csrss/lsass changes are adapted in `macos/0007`.
 
 ### additional macOS patches (`wine/macos/`)
 
@@ -53,6 +53,8 @@ The `_dw` `PsGetProcessExitStatus` stub (`d077b3f5c3`) is replaced by `macos/000
 - `0006-msync-query-time-only-for-relative-timeouts.patch`:
   - Reads the system clock only when converting a relative timeout to an absolute deadline.
   - Avoids an unused clock read for infinite waits and existing absolute deadlines; wait and wake behavior is unchanged.
+- `0007-lsass-add-a-stub-started-by-wineboot.patch`:
+  - Starts an `lsass.exe` stub with services so ACE-CORE can initialize. Source commits and adaptation details are in the patch header.
 
 ## MoltenVK
 
