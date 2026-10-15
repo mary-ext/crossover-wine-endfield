@@ -1,0 +1,24 @@
+From 886e42e74b104e9a4a5b6e793cf926e9ed601215 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Wed, 2 Sep 2026 02:13:18 +0200
+Subject: [PATCH] ntoskrnl.exe: Use the cached session id in
+ PsGetCurrentProcessSessionId.
+
+(cherry picked from commit 56c060cb6ed51b2c518d17e40e3a94a45adcc322)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 3a750dde466..f566eb305cb 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -3279,7 +3279,7 @@ HANDLE WINAPI PsGetCurrentProcessId(void)
+  */
+ ULONG WINAPI PsGetCurrentProcessSessionId(void)
+ {
+-    return PsGetCurrentProcess()->info.PebBaseAddress->SessionId;
++    return PsGetCurrentProcess()->session_id;
+ }
+ 
+ /***********************************************************************

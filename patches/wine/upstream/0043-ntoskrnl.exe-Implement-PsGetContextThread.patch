@@ -1,0 +1,73 @@
+From d5e436399c61a9bfba0e81b55e336ccb570de4a5 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Thu, 25 Jun 2026 02:10:30 -0400
+Subject: [PATCH] ntoskrnl.exe: Implement PsGetContextThread.
+
+(cherry picked from commit 941f19282c3296b285821039dd789db1dc8e8249)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 25 +++++++++++++++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  2 +-
+ include/ddk/ntddk.h                 |  1 +
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 4d5596b50a7..944af3818ea 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -2716,6 +2716,31 @@ HANDLE WINAPI PsGetThreadProcessId( PETHREAD thread )
+     return thread->kthread.id.UniqueProcess;
+ }
+ 
++/*********************************************************************
++ *           PsGetContextThread    (NTOSKRNL.@)
++ */
++NTSTATUS WINAPI PsGetContextThread(PETHREAD thread, CONTEXT *context, KPROCESSOR_MODE mode)
++{
++    NTSTATUS status;
++    HANDLE h;
++
++    TRACE("%p %p %u\n", thread, context, mode);
++
++    if (mode == KernelMode)
++        return STATUS_UNSUCCESSFUL;
++
++    if ((status = ObOpenObjectByPointer(thread, 0, NULL, THREAD_ALL_ACCESS, NULL, KernelMode, &h)))
++    {
++        WARN("Error opening thread object, status %#lx.\n", status);
++        return status;
++    }
++
++    status = NtGetContextThread(h, context);
++    NtClose(h);
++
++    return status;
++}
++
+ /***********************************************************************
+  *           KeInsertQueue   (NTOSKRNL.EXE.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 5109aa38546..f50bbb2074b 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -911,7 +911,7 @@
+ @ stdcall PsDereferencePrimaryToken(ptr)
+ @ stub PsDisableImpersonation
+ @ stub PsEstablishWin32Callouts
+-@ stub PsGetContextThread
++@ stdcall PsGetContextThread(ptr ptr long)
+ @ stdcall PsGetCurrentProcess() IoGetCurrentProcess
+ @ stdcall PsGetCurrentProcessId()
+ @ stdcall PsGetCurrentProcessSessionId()
+diff --git a/include/ddk/ntddk.h b/include/ddk/ntddk.h
+index 0595b5f287b..898b0a4f8bd 100644
+--- a/include/ddk/ntddk.h
++++ b/include/ddk/ntddk.h
+@@ -295,6 +295,7 @@ NTSTATUS  WINAPI KeExpandKernelStackAndCallout(PEXPAND_STACK_CALLOUT,void*,SIZE_
+ void      WINAPI KeSetTargetProcessorDpc(PRKDPC,CCHAR);
+ PHYSICAL_MEMORY_RANGE * WINAPI MmGetPhysicalMemoryRanges(void);
+ BOOLEAN   WINAPI MmIsAddressValid(void *);
++NTSTATUS  WINAPI PsGetContextThread(PETHREAD,CONTEXT*,KPROCESSOR_MODE);
+ LONGLONG  WINAPI PsGetProcessCreateTimeQuadPart(PEPROCESS);
+ HANDLE    WINAPI PsGetProcessId(PEPROCESS);
+ const char * WINAPI PsGetProcessImageFileName(PEPROCESS);

@@ -1,0 +1,57 @@
+From 088787f0c170654534cdf8137bdd7af68f79bf40 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Tue, 22 Jul 2025 16:06:22 -0400
+Subject: [PATCH] ntoskrnl.exe: Implement PsGetThreadProcess.
+
+(cherry picked from commit 42da90bc6c088ce9f01ea8661ca98ddaf6c4ce71)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 9 +++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 2 +-
+ include/ddk/ntddk.h                 | 1 +
+ 3 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 4e836e44c10..ae820116447 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4812,6 +4812,15 @@ NTSTATUS WINAPI EtwUnregister(REGHANDLE handle)
+     return STATUS_SUCCESS;
+ }
+ 
++/***********************************************************************
++ *           IoThreadToProcess / PsGetThreadProcess   (NTOSKRNL.EXE.@)
++ */
++PEPROCESS WINAPI IoThreadToProcess(PETHREAD thread)
++{
++    TRACE("thread %p\n", thread);
++    return thread->kthread.process;
++}
++
+ /*****************************************************
+  *           DllMain
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 9c1f3616a8d..5bcde9187a3 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -943,7 +943,7 @@
+ @ stub PsGetThreadFreezeCount
+ @ stub PsGetThreadHardErrorsAreDisabled
+ @ stdcall PsGetThreadId(ptr)
+-@ stub PsGetThreadProcess
++@ stdcall PsGetThreadProcess(ptr) IoThreadToProcess
+ @ stdcall PsGetThreadProcessId(ptr)
+ @ stub PsGetThreadSessionId
+ @ stub PsGetThreadTeb
+diff --git a/include/ddk/ntddk.h b/include/ddk/ntddk.h
+index 00ca48d01aa..ded99e3c0d5 100644
+--- a/include/ddk/ntddk.h
++++ b/include/ddk/ntddk.h
+@@ -293,6 +293,7 @@ HANDLE    WINAPI PsGetProcessId(PEPROCESS);
+ void *    WINAPI PsGetProcessSectionBaseAddress(PEPROCESS);
+ ULONG     WINAPI PsGetProcessSessionId(PEPROCESS);
+ HANDLE    WINAPI PsGetThreadId(PETHREAD);
++PEPROCESS WINAPI PsGetThreadProcess(PETHREAD);
+ HANDLE    WINAPI PsGetThreadProcessId(PETHREAD);
+ NTSTATUS  WINAPI PsRemoveLoadImageNotifyRoutine(PLOAD_IMAGE_NOTIFY_ROUTINE);
+ NTSTATUS  WINAPI PsSetCreateProcessNotifyRoutine(PCREATE_PROCESS_NOTIFY_ROUTINE,BOOLEAN);

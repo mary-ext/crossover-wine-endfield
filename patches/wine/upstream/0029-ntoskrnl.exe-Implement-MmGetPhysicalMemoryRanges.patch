@@ -1,0 +1,89 @@
+From 70cada90c1b9822ad891f25b013d3100c12ea66c Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Wed, 9 Sep 2026 16:59:39 +0200
+Subject: [PATCH] ntoskrnl.exe: Implement MmGetPhysicalMemoryRanges.
+
+(cherry picked from commit 371f747e5d4e3d076bc46b8da511a2b607351f14)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 28 ++++++++++++++++++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  2 +-
+ include/ddk/ntddk.h                 |  7 +++++++
+ 3 files changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 1c01bdea63e..d5581724bae 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -3017,6 +3017,34 @@ PHYSICAL_ADDRESS WINAPI MmGetPhysicalAddress(void *virtual_address)
+     return ret;
+ }
+ 
++/***********************************************************************
++ *           MmGetPhysicalMemoryRanges   (NTOSKRNL.EXE.@)
++ */
++PHYSICAL_MEMORY_RANGE * WINAPI MmGetPhysicalMemoryRanges(void)
++{
++    SYSTEM_BASIC_INFORMATION info;
++    PHYSICAL_MEMORY_RANGE *ranges;
++    NTSTATUS status;
++
++    TRACE( "()\n" );
++
++    if ((status = NtQuerySystemInformation( SystemBasicInformation, &info, sizeof(info), NULL )))
++    {
++        WARN( "failed to query system information, status %#lx\n", status );
++        return NULL;
++    }
++
++    if (!(ranges = ExAllocatePool( NonPagedPool, 2 * sizeof(*ranges) )))
++        return NULL;
++
++    /* FIXME: Windows returns actual hardware ranges, we report the correct size but in one range */
++    ranges[0].BaseAddress.QuadPart = (ULONGLONG)info.MmLowestPhysicalPage * info.PageSize;
++    ranges[0].NumberOfBytes.QuadPart = (ULONGLONG)info.MmNumberOfPhysicalPages * info.PageSize;
++    memset( &ranges[1], 0, sizeof(ranges[1]) );
++
++    return ranges;
++}
++
+ /***********************************************************************
+  *           MmMapIoSpace   (NTOSKRNL.EXE.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 68bddc4e7d6..7b12cd760b3 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -729,7 +729,7 @@
+ @ stdcall MmFreeNonCachedMemory(ptr long)
+ @ stub MmFreePagesFromMdl
+ @ stdcall MmGetPhysicalAddress(ptr)
+-@ stub MmGetPhysicalMemoryRanges
++@ stdcall MmGetPhysicalMemoryRanges()
+ @ stdcall MmGetSystemRoutineAddress(ptr)
+ @ stub MmGetVirtualForPhysical
+ @ stub MmGrowKernelStack
+diff --git a/include/ddk/ntddk.h b/include/ddk/ntddk.h
+index 85712e59bd9..1c8bbd4932c 100644
+--- a/include/ddk/ntddk.h
++++ b/include/ddk/ntddk.h
+@@ -146,6 +146,12 @@ typedef struct _FILE_VALID_DATA_LENGTH_INFORMATION
+   LARGE_INTEGER ValidDataLength;
+ } FILE_VALID_DATA_LENGTH_INFORMATION, *PFILE_VALID_DATA_LENGTH_INFORMATION;
+ 
++typedef struct _PHYSICAL_MEMORY_RANGE
++{
++    PHYSICAL_ADDRESS BaseAddress;
++    LARGE_INTEGER    NumberOfBytes;
++} PHYSICAL_MEMORY_RANGE, *PPHYSICAL_MEMORY_RANGE;
++
+ typedef struct _PROCESS_ACCESS_TOKEN
+ {
+     HANDLE Token;
+@@ -287,6 +293,7 @@ BOOLEAN   WINAPI KeAreApcsDisabled(void);
+ void      WINAPI DECLSPEC_NORETURN KeBugCheck(ULONG);
+ NTSTATUS  WINAPI KeExpandKernelStackAndCallout(PEXPAND_STACK_CALLOUT,void*,SIZE_T);
+ void      WINAPI KeSetTargetProcessorDpc(PRKDPC,CCHAR);
++PHYSICAL_MEMORY_RANGE * WINAPI MmGetPhysicalMemoryRanges(void);
+ BOOLEAN   WINAPI MmIsAddressValid(void *);
+ LONGLONG  WINAPI PsGetProcessCreateTimeQuadPart(PEPROCESS);
+ HANDLE    WINAPI PsGetProcessId(PEPROCESS);

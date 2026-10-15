@@ -1,0 +1,80 @@
+From 2b436291222dc8e465070a161fc103071674ac55 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Thu, 25 Jun 2026 03:40:08 -0400
+Subject: [PATCH] ntoskrnl.exe: Implement PsReferencePrimaryToken.
+
+(cherry picked from commit 1926cd760f617ec5f3929ae476435c539a951012)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 32 +++++++++++++++++++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec |  2 +-
+ include/ddk/ntifs.h                 |  1 +
+ 3 files changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index dc1475135fd..1be4d67e5bf 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -3436,6 +3436,38 @@ NTSTATUS WINAPI PsReferenceProcessFilePointer(PEPROCESS process, FILE_OBJECT **f
+     return STATUS_NOT_IMPLEMENTED;
+ }
+ 
++/*********************************************************************
++ *           PsReferencePrimaryToken    (NTOSKRNL.@)
++ */
++PACCESS_TOKEN WINAPI PsReferencePrimaryToken( PEPROCESS process )
++{
++    NTSTATUS status;
++    HANDLE h, token;
++    PACCESS_TOKEN ret = NULL;
++
++    TRACE("%p\n", process);
++
++    if ((status = ObOpenObjectByPointer(process, 0, NULL, PROCESS_ALL_ACCESS, NULL, KernelMode, &h)))
++    {
++        WARN("Error opening process object, status %#lx.\n", status);
++        return NULL;
++    }
++
++    if ((status = NtOpenProcessToken(h, TOKEN_ALL_ACCESS, &token)))
++    {
++        NtClose(h);
++        return NULL;
++    }
++
++    if ((status = ObReferenceObjectByHandle(token, TOKEN_ALL_ACCESS, SeTokenObjectType,
++                                            KernelMode, &ret, NULL)))
++        ret = NULL;
++
++    NtClose(token);
++    NtClose(h);
++
++    return ret;
++}
+ 
+ /***********************************************************************
+  *           PsTerminateSystemThread   (NTOSKRNL.EXE.@)
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 587e80b5f54..0ddcbbba7ac 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -961,7 +961,7 @@
+ @ stdcall PsLookupThreadByThreadId(ptr ptr)
+ @ extern PsProcessType
+ @ stub PsReferenceImpersonationToken
+-@ stub PsReferencePrimaryToken
++@ stdcall PsReferencePrimaryToken(ptr)
+ @ stdcall PsReferenceProcessFilePointer(ptr ptr)
+ @ stdcall PsReleaseProcessExitSynchronization(ptr)
+ @ stdcall PsRemoveCreateThreadNotifyRoutine(ptr)
+diff --git a/include/ddk/ntifs.h b/include/ddk/ntifs.h
+index 965715738d7..0c3a68dc3bf 100644
+--- a/include/ddk/ntifs.h
++++ b/include/ddk/ntifs.h
+@@ -214,6 +214,7 @@ NTSTATUS WINAPI ObQueryNameString(PVOID,POBJECT_NAME_INFORMATION,ULONG,PULONG);
+ BOOLEAN WINAPI PsIsSystemThread(PETHREAD);
+ NTSTATUS WINAPI PsLookupProcessByProcessId(HANDLE,PEPROCESS*);
+ NTSTATUS WINAPI PsLookupThreadByThreadId(HANDLE,PETHREAD*);
++PACCESS_TOKEN WINAPI PsReferencePrimaryToken(PEPROCESS);
+ void WINAPI PsRevertToSelf(void);
+ char WINAPI RtlQueryProcessPlaceholderCompatibilityMode(void);
+ 

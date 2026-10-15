@@ -1,0 +1,57 @@
+From 244e4ece4a4ec240d9344ae3a2ec7039a70c1726 Mon Sep 17 00:00:00 2001
+From: Nello De Gregoris <bluechxindv@gmail.com>
+Date: Thu, 10 Sep 2026 04:30:49 +0200
+Subject: [PATCH] ntoskrnl.exe: Implement PsDereferencePrimaryToken.
+
+(cherry picked from commit e5345a9a799e65d74c6d489f29c39c1233f16dcb)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 9 +++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 2 +-
+ include/ddk/ntifs.h                 | 1 +
+ 3 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index 1be4d67e5bf..1c01bdea63e 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -3436,6 +3436,15 @@ NTSTATUS WINAPI PsReferenceProcessFilePointer(PEPROCESS process, FILE_OBJECT **f
+     return STATUS_NOT_IMPLEMENTED;
+ }
+ 
++/*********************************************************************
++ *           PsDereferencePrimaryToken    (NTOSKRNL.@)
++ */
++void WINAPI PsDereferencePrimaryToken( PACCESS_TOKEN token )
++{
++    TRACE("%p\n", token);
++    ObDereferenceObject(token);
++}
++
+ /*********************************************************************
+  *           PsReferencePrimaryToken    (NTOSKRNL.@)
+  */
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 0ddcbbba7ac..68bddc4e7d6 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -908,7 +908,7 @@
+ @ stub PsCreateSystemProcess
+ @ stdcall PsCreateSystemThread(ptr long ptr long ptr ptr ptr)
+ @ stub PsDereferenceImpersonationToken
+-@ stub PsDereferencePrimaryToken
++@ stdcall PsDereferencePrimaryToken(ptr)
+ @ stub PsDisableImpersonation
+ @ stub PsEstablishWin32Callouts
+ @ stub PsGetContextThread
+diff --git a/include/ddk/ntifs.h b/include/ddk/ntifs.h
+index 0c3a68dc3bf..e49ae257a0e 100644
+--- a/include/ddk/ntifs.h
++++ b/include/ddk/ntifs.h
+@@ -211,6 +211,7 @@ void WINAPI KeStackAttachProcess(KPROCESS*,KAPC_STATE*);
+ void WINAPI KeUnstackDetachProcess(KAPC_STATE*);
+ NTSTATUS WINAPI ObOpenObjectByPointer(void*,ULONG,PACCESS_STATE,ACCESS_MASK,POBJECT_TYPE,KPROCESSOR_MODE,HANDLE*);
+ NTSTATUS WINAPI ObQueryNameString(PVOID,POBJECT_NAME_INFORMATION,ULONG,PULONG);
++void WINAPI PsDereferencePrimaryToken(PACCESS_TOKEN);
+ BOOLEAN WINAPI PsIsSystemThread(PETHREAD);
+ NTSTATUS WINAPI PsLookupProcessByProcessId(HANDLE,PEPROCESS*);
+ NTSTATUS WINAPI PsLookupThreadByThreadId(HANDLE,PETHREAD*);

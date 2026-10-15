@@ -4,22 +4,32 @@
 
 Applied to CrossOver's Wine 11.0 source, in the following order:
 
-1. `wine/dwproton/em-backports/*`.
-2. `wine/dwproton/misc/*`.
+1. `wine/upstream/*`.
+2. `wine/dwproton/*`.
 3. `wine/macos/*`.
+
+### upstream Wine backports (`wine/upstream/`)
+
+- `0001`–`0036`: `ntoskrnl.exe` functions ACE's drivers call, including guarded mutexes, bug check callback stubs, `PsGetProcessSessionId`, `PsGetProcessImageFileName`, `SeLocateProcessImageName`, `PsReferencePrimaryToken` and `MmGetPhysicalMemoryRanges`.
+  - `0002`, `0024`: server support for directory and token kernel objects.
+  - `0006`: driver security cookie update after relocation.
+- `0037`–`0042`: MDL mapping and locking (`MmMapLockedPagesSpecifyCache`, `MmProbeAndLockPages`, `MmBuildMdlForNonPagedPool`); `dwproton/0007` needs the `MDL_PAGES_LOCKED` flag these set.
+- `0043`: `PsGetContextThread`.
 
 ### dwproton patches (`wine/dwproton/`)
 
-Taken from [`dawn-winery/dwproton-mirror#b816be489`](https://github.com/dawn-winery/dwproton-mirror/commit/b816be489049a10453b470c6a12dcf552ea41773)
-
-- `em-backports/0001–0017`:
-  - Implements `ntoskrnl.exe` functions ACE's driver calls, including `KeAcquireGuardedMutex`, `PsGetProcessImageFileName` and `MmGetPhysicalMemoryRanges`.
-- `misc/0008`:
-  - Bypasses wintrust for `winex11.drv` / `winewayland.drv`; unused on macOS.
-- `misc/0009`, `misc/0010`:
-  - Spoofs `GetProcAddress` for `KiUserApcDispatcher` / `KiUserCallbackDispatcher`, limited to `Endfield.exe` / `EM-Win64-Shipping.exe`.
-- `misc/0011`:
+- `0001`, `0003`:
+  - Returns an `int3` stub from `GetProcAddress` for `KiUserApcDispatcher` / `KiUserCallbackDispatcher` in `Endfield.exe` / `EM-Win64-Shipping.exe`, or any process with `PROTON_ENABLE_INT3_HACK=1`.
+- `0002`:
   - Uses QueryPerformanceCounter for `NtDelayExecution` relative waits.
+- `0004`:
+  - Calls `DriverInit` with return-address bits 48–63 set to avoid an ACE-CORE bug check at entry.
+- `0005`, `0006`:
+  - Adds an `MmCopyMemory` stub; passes only the service name in `DriverExtension->ServiceKeyName`.
+- `0007`, `0008`:
+  - Defers unmapping section views while a locked MDL maps them; calls `PsGetContextThread` through a thunk.
+
+The `_dw` `PsGetProcessExitStatus` stub (`d077b3f5c3`) is replaced by `macos/0005`.
 
 ### additional macOS patches (`wine/macos/`)
 
@@ -75,5 +85,5 @@ Applied to MoltenVK v1.4.2 and its pinned SPIRV-Cross submodule.
 ## License
 
 - Wine patches (`wine/`): LGPL-2.1-or-later, [Wine's](https://www.winehq.org/) license.
-  - dwproton patches (`wine/dwproton/`) retain upstream authorship: Etaash Mathamsetty, Ziia Shi / mkrsym1, NelloKudo and other dwproton contributors.
+  - Imported patches retain author and source-commit metadata in their headers.
 - MoltenVK patches (`moltenvk/`): Apache-2.0, like MoltenVK and SPIRV-Cross.

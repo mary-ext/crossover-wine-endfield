@@ -1,0 +1,42 @@
+From 4684a38c10e009482798b9eee8ceecb47a2955f2 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Wed, 23 Jul 2025 12:46:14 -0400
+Subject: [PATCH] ntoskrnl.exe: Add stub for KeCapturePersistentThreadState.
+
+(cherry picked from commit c9b27b528bc34cd9a884750f258b9f1c863c8c7f)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 7 +++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 2 +-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index e4a1c8079ac..e41e5a68346 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4880,6 +4880,13 @@ NTSTATUS WINAPI KdChangeOption(ULONG option, ULONG in_size, PVOID in_buffer,
+     return STATUS_DEBUGGER_INACTIVE;
+ }
+ 
++NTSTATUS WINAPI KeCapturePersistentThreadState(CONTEXT *context, PKTHREAD thread, ULONG code,
++                                               ULONG param1, ULONG param2, ULONG param3, ULONG param4, void *addr)
++{
++    FIXME("stub: %p %p %lu %lu %lu %lu %lu %p\n", context, thread, code, param1, param2, param3, param4, addr);
++    return STATUS_NOT_IMPLEMENTED;
++}
++
+ NTSTATUS WINAPI KdDisableDebugger(void)
+ {
+     FIXME(": stub.\n");
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index cccef2d9990..58927c7b5c4 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -550,7 +550,7 @@
+ @ stdcall KeBugCheck(long)
+ @ stdcall KeBugCheckEx(long long long long long)
+ @ stdcall KeCancelTimer(ptr)
+-@ stub KeCapturePersistentThreadState
++@ stdcall KeCapturePersistentThreadState(ptr ptr long long long long long ptr)
+ @ stdcall KeClearEvent(ptr)
+ @ stub KeConnectInterrupt
+ @ stub KeDcacheFlushCount

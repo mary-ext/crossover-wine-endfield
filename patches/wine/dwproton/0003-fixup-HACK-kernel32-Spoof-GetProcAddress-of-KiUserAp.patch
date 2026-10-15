@@ -1,0 +1,50 @@
+From 58ef4a499cf0c589fc658cd0f537d7a8dad988d4 Mon Sep 17 00:00:00 2001
+From: shxrrydw <sherrydrv@gmail.com>
+Date: Tue, 29 Sep 2026 15:29:47 +0200
+Subject: [PATCH] fixup! HACK: kernel32: Spoof GetProcAddress of
+ KiUserApcDispatcher and KiUserCallbackDispatcher.
+
+---
+ dlls/kernel32/module.c | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/dlls/kernel32/module.c b/dlls/kernel32/module.c
+index f64ac491372..203920ef2f5 100644
+--- a/dlls/kernel32/module.c
++++ b/dlls/kernel32/module.c
+@@ -262,7 +262,6 @@ BOOL WINAPI GetBinaryTypeA( LPCSTR lpApplicationName, LPDWORD lpBinaryType )
+     return GetBinaryTypeW(NtCurrentTeb()->StaticUnicodeString.Buffer, lpBinaryType);
+ }
+ 
+-#ifdef __x86_64__
+ static BOOL needs_int3_hack(void)
+ {
+     static volatile int cache = -1;
+@@ -295,12 +294,8 @@ static BOOL needs_int3_hack(void)
+ 
+ static void __attribute__((naked)) int3_stub( void )
+ {
+-    asm("int3\t\n"
+-        "int3\t\n"
+-        "int3\t\n"
+-        "int3\t\n");
++    asm(".byte 0xCC, 0xCC, 0xCC, 0xCC\n\t");
+ }
+-#endif
+ 
+ /***********************************************************************
+  *           GetProcAddress   		(KERNEL32.@)
+@@ -325,13 +320,11 @@ FARPROC get_proc_address( HMODULE hModule, LPCSTR function )
+     {
+         ANSI_STRING     str;
+ 
+-#ifdef __x86_64__
+         if (needs_int3_hack() && (strcmp( function, "KiUserApcDispatcher" ) == 0 || strcmp( function, "KiUserCallbackDispatcher" ) == 0))
+         {
+             FIXME( "HACK: returning int3 stub instead of %s\n", function );
+             return (FARPROC)&int3_stub;
+         }
+-#endif
+ 
+         RtlInitAnsiString( &str, function );
+         if (!set_ntstatus( LdrGetProcedureAddress( hModule, &str, 0, (void**)&fp ))) return NULL;

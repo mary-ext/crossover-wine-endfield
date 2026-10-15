@@ -1,0 +1,38 @@
+From a06a0fe4bd3d9dbf6111f53641d0d5326d15c796 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Tue, 3 Feb 2026 22:57:20 -0600
+Subject: [PATCH] ntoskrnl: Use fastcall for KeInitializeGuardedMutex.
+
+(cherry picked from commit 534a06edb4e07875e1788e94647a906d221bbe3b)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 2 +-
+ dlls/ntoskrnl.exe/sync.c            | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index d5276c30f81..17c74b9322e 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -588,7 +588,7 @@
+ @ stub KeInitializeInterrupt
+ @ stub KeInitializeMutant
+ @ stdcall KeInitializeMutex(ptr long)
+-@ stdcall KeInitializeGuardedMutex(ptr)
++@ stdcall -fastcall KeInitializeGuardedMutex(ptr)
+ @ stub KeInitializeQueue
+ @ stdcall KeInitializeSemaphore(ptr long long)
+ @ stdcall KeInitializeSpinLock(ptr) NTOSKRNL_KeInitializeSpinLock
+diff --git a/dlls/ntoskrnl.exe/sync.c b/dlls/ntoskrnl.exe/sync.c
+index 009a1085bce..6cc29c50b1f 100644
+--- a/dlls/ntoskrnl.exe/sync.c
++++ b/dlls/ntoskrnl.exe/sync.c
+@@ -429,7 +429,8 @@ LONG WINAPI KeReleaseMutex( PRKMUTEX mutex, BOOLEAN wait )
+ /***********************************************************************
+  *           KeInitializeGuardedMutex   (NTOSKRNL.EXE.@)
+  */
+-void WINAPI KeInitializeGuardedMutex(PKGUARDED_MUTEX mutex)
++DEFINE_FASTCALL1_WRAPPER(KeInitializeGuardedMutex)
++void FASTCALL KeInitializeGuardedMutex(PKGUARDED_MUTEX mutex)
+ {
+     TRACE("mutex %p.\n", mutex);
+     mutex->Count = FM_LOCK_BIT;

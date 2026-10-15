@@ -1,0 +1,115 @@
+From bd8271ec038725c0f3854596c55ab061d32399c5 Mon Sep 17 00:00:00 2001
+From: Nello De Gregoris <bluechxindv@gmail.com>
+Date: Tue, 15 Sep 2026 01:16:29 +0200
+Subject: [PATCH] ntoskrnl.exe: Implement PsGetProcessImageFileName.
+
+Based on patches from Etaash Mathamsetty.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=59411
+(cherry picked from commit edec121ebad6625df4d54072b536d78df5d5b5b6)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c         | 37 ++++++++++++++++++++++++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec  |  2 +-
+ dlls/ntoskrnl.exe/ntoskrnl_private.h |  1 +
+ include/ddk/ntddk.h                  |  1 +
+ 4 files changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index e41e5a68346..5ce5bfef3b1 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -2475,6 +2475,33 @@ NTSTATUS WINAPI FsRtlRegisterUncProvider(PHANDLE MupHandle, PUNICODE_STRING Redi
+     return STATUS_NOT_IMPLEMENTED;
+ }
+ 
++static void get_process_image_file_name( HANDLE handle, PEPROCESS process )
++{
++    UNICODE_STRING *image;
++    WCHAR *p, *end;
++    ULONG len;
++
++    if (NtQueryInformationProcess( handle, ProcessImageFileName, NULL, 0, &len ) != STATUS_INFO_LENGTH_MISMATCH)
++        return;
++
++    len += sizeof(WCHAR) + sizeof(UNICODE_STRING);
++
++    if (!(image = malloc( len )))
++        return;
++
++    if (!NtQueryInformationProcess( handle, ProcessImageFileName, image, len, NULL ))
++    {
++        end = image->Buffer + image->Length / sizeof(WCHAR);
++        p = end;
++
++        while (p > image->Buffer && p[-1] != '\\')
++            p--;
++
++        RtlUnicodeToMultiByteN( process->image_name, sizeof(process->image_name) - 1, &len, p, (end - p) * sizeof(WCHAR) );
++        process->image_name[len] = 0;
++    }
++    free( image );
++}
+ 
+ static void *create_process_object( HANDLE handle )
+ {
+@@ -2487,6 +2514,7 @@ static void *create_process_object( HANDLE handle )
+     NtQueryInformationProcess( handle, ProcessBasicInformation, &process->info, sizeof(process->info), NULL );
+     NtQueryInformationProcess( handle, ProcessSessionInformation, &process->session_id, sizeof(process->session_id), NULL );
+     NtQueryInformationProcess( handle, ProcessTimes, &process->times, sizeof(process->times), NULL );
++    get_process_image_file_name( handle, process );
+     IsWow64Process( handle, &process->wow64 );
+ 
+     return process;
+@@ -2576,6 +2604,15 @@ LONGLONG WINAPI PsGetProcessCreateTimeQuadPart( PEPROCESS process )
+     return process->times.CreateTime.QuadPart;
+ }
+ 
++/*********************************************************************
++ *           PsGetProcessImageFileName    (NTOSKRNL.@)
++ */
++const char *WINAPI PsGetProcessImageFileName( PEPROCESS process )
++{
++    TRACE("%p -> %s\n", process, debugstr_a(process->image_name));
++    return process->image_name;
++}
++
+ static void *create_thread_object( HANDLE handle )
+ {
+     THREAD_BASIC_INFORMATION info;
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 58927c7b5c4..5109aa38546 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -929,7 +929,7 @@
+ @ stub PsGetProcessExitStatus
+ @ stub PsGetProcessExitTime
+ @ stdcall PsGetProcessId(ptr)
+-@ stub PsGetProcessImageFileName
++@ stdcall PsGetProcessImageFileName(ptr)
+ @ stdcall PsGetProcessInheritedFromUniqueProcessId(ptr)
+ @ stub PsGetProcessJob
+ @ stdcall PsGetProcessPeb(ptr)
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl_private.h b/dlls/ntoskrnl.exe/ntoskrnl_private.h
+index 3e468dec295..5d1fbb98091 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl_private.h
++++ b/dlls/ntoskrnl.exe/ntoskrnl_private.h
+@@ -58,6 +58,7 @@ struct _EPROCESS
+     KERNEL_USER_TIMES times;
+     BOOL wow64;
+     ULONG session_id;
++    char image_name[15];
+ };
+ 
+ struct _KTHREAD
+diff --git a/include/ddk/ntddk.h b/include/ddk/ntddk.h
+index 1c8bbd4932c..0595b5f287b 100644
+--- a/include/ddk/ntddk.h
++++ b/include/ddk/ntddk.h
+@@ -297,6 +297,7 @@ PHYSICAL_MEMORY_RANGE * WINAPI MmGetPhysicalMemoryRanges(void);
+ BOOLEAN   WINAPI MmIsAddressValid(void *);
+ LONGLONG  WINAPI PsGetProcessCreateTimeQuadPart(PEPROCESS);
+ HANDLE    WINAPI PsGetProcessId(PEPROCESS);
++const char * WINAPI PsGetProcessImageFileName(PEPROCESS);
+ PEB *     WINAPI PsGetProcessPeb(PEPROCESS);
+ void *    WINAPI PsGetProcessSectionBaseAddress(PEPROCESS);
+ ULONG     WINAPI PsGetProcessSessionId(PEPROCESS);

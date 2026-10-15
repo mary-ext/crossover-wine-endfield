@@ -1,0 +1,77 @@
+From 281189368870ab92fea2d26b99dbd1258ca7ff50 Mon Sep 17 00:00:00 2001
+From: Ziia Shi <mkrsym1@gmail.com>
+Date: Tue, 29 Sep 2026 15:18:11 +0200
+Subject: [PATCH] HACK: kernel32: Spoof GetProcAddress of KiUserApcDispatcher
+ and KiUserCallbackDispatcher.
+
+App: Duet Night Abyss (3950020).
+---
+ dlls/kernel32/module.c | 48 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+
+diff --git a/dlls/kernel32/module.c b/dlls/kernel32/module.c
+index ed15e57c29c..f64ac491372 100644
+--- a/dlls/kernel32/module.c
++++ b/dlls/kernel32/module.c
+@@ -262,6 +262,46 @@ BOOL WINAPI GetBinaryTypeA( LPCSTR lpApplicationName, LPDWORD lpBinaryType )
+     return GetBinaryTypeW(NtCurrentTeb()->StaticUnicodeString.Buffer, lpBinaryType);
+ }
+ 
++#ifdef __x86_64__
++static BOOL needs_int3_hack(void)
++{
++    static volatile int cache = -1;
++    
++    if (cache == -1)
++    {
++        const WCHAR *p, *name = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
++        WCHAR env[8];
++        BOOL ret;
++        
++        if ((p = wcsrchr(name, '/')))
++            name = p + 1;
++        if ((p = wcsrchr(name, '\\')))
++            name = p + 1;
++        
++        ret = ((!wcsicmp(name, L"Endfield.exe")) ||
++               (!wcsicmp(name, L"EM-Win64-Shipping.exe")));
++        
++        if (GetEnvironmentVariableW(L"PROTON_ENABLE_INT3_HACK", env, ARRAY_SIZE(env)))
++        {
++            if (_wtoi(env) == 1)
++                ret = TRUE;
++        }
++        
++        cache = ret;
++    }
++    
++    return cache;
++}
++
++static void __attribute__((naked)) int3_stub( void )
++{
++    asm("int3\t\n"
++        "int3\t\n"
++        "int3\t\n"
++        "int3\t\n");
++}
++#endif
++
+ /***********************************************************************
+  *           GetProcAddress   		(KERNEL32.@)
+  *
+@@ -285,6 +325,14 @@ FARPROC get_proc_address( HMODULE hModule, LPCSTR function )
+     {
+         ANSI_STRING     str;
+ 
++#ifdef __x86_64__
++        if (needs_int3_hack() && (strcmp( function, "KiUserApcDispatcher" ) == 0 || strcmp( function, "KiUserCallbackDispatcher" ) == 0))
++        {
++            FIXME( "HACK: returning int3 stub instead of %s\n", function );
++            return (FARPROC)&int3_stub;
++        }
++#endif
++
+         RtlInitAnsiString( &str, function );
+         if (!set_ntstatus( LdrGetProcedureAddress( hModule, &str, 0, (void**)&fp ))) return NULL;
+     }

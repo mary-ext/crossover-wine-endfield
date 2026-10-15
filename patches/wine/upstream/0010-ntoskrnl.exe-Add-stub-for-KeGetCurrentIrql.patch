@@ -1,0 +1,40 @@
+From b26885115fa8955b4fc7b32aa16d9c4316a95641 Mon Sep 17 00:00:00 2001
+From: Nello De Gregoris <bluechxindv@gmail.com>
+Date: Tue, 4 Aug 2026 12:28:51 +0200
+Subject: [PATCH] ntoskrnl.exe: Add stub for KeGetCurrentIrql().
+
+(cherry picked from commit f672f7f99196ec53bd8ed8b431f194046583b2c3)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c        | 6 ++++++
+ dlls/ntoskrnl.exe/ntoskrnl.exe.spec | 1 +
+ 2 files changed, 7 insertions(+)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index ba1200f9927..f3ec44d8c8f 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4736,6 +4736,12 @@ void WINAPI KeLowerIrql(KIRQL new)
+     FIXME("new %u: stub.\n", new);
+ }
+ 
++KIRQL WINAPI KeGetCurrentIrql(void)
++{
++    FIXME("stub.\n");
++    return 0;
++}
++
+ #endif
+ 
+ typedef void (WINAPI *PETW_CLASSIC_CALLBACK)(
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+index 17c74b9322e..c5bc1cae307 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
++++ b/dlls/ntoskrnl.exe/ntoskrnl.exe.spec
+@@ -565,6 +565,7 @@
+ @ stub KeFindConfigurationNextEntry
+ @ stub KeFlushEntireTb
+ @ stdcall KeFlushQueuedDpcs()
++@ stdcall -arch=x86_64 KeGetCurrentIrql()
+ @ stdcall KeGetCurrentProcessorNumber() NtGetCurrentProcessorNumber
+ @ stdcall KeGetCurrentProcessorNumberEx(ptr)
+ @ stdcall KeGetCurrentThread()

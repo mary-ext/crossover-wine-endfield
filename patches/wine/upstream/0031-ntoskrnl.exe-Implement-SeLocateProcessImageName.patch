@@ -1,0 +1,76 @@
+From ec05f86e7fdde61964cc8686806279ff33b0d853 Mon Sep 17 00:00:00 2001
+From: Etaash Mathamsetty <etaash.mathamsetty@gmail.com>
+Date: Thu, 25 Jun 2026 02:57:14 -0400
+Subject: [PATCH] ntoskrnl.exe: Implement SeLocateProcessImageName.
+
+(cherry picked from commit f195cbd8729ca2071eddb671ac9c186dbae5a06c)
+---
+ dlls/ntoskrnl.exe/ntoskrnl.c | 43 +++++++++++++++++++++++++++++++++---
+ include/ddk/ntifs.h          |  1 +
+ 2 files changed, 41 insertions(+), 3 deletions(-)
+
+diff --git a/dlls/ntoskrnl.exe/ntoskrnl.c b/dlls/ntoskrnl.exe/ntoskrnl.c
+index d5581724bae..c4e2d3b0e7c 100644
+--- a/dlls/ntoskrnl.exe/ntoskrnl.c
++++ b/dlls/ntoskrnl.exe/ntoskrnl.c
+@@ -4494,9 +4494,46 @@ BOOLEAN WINAPI SePrivilegeCheck(PRIVILEGE_SET *privileges, SECURITY_SUBJECT_CONT
+  */
+ NTSTATUS WINAPI SeLocateProcessImageName(PEPROCESS process, UNICODE_STRING **image_name)
+ {
+-    FIXME("stub: %p %p\n", process, image_name);
+-    if (image_name) *image_name = NULL;
+-    return STATUS_NOT_IMPLEMENTED;
++    ULONG len;
++    NTSTATUS status;
++    HANDLE h;
++
++    TRACE("%p %p\n", process, image_name);
++
++    if (!image_name) return STATUS_INVALID_PARAMETER;
++
++    if ((status = ObOpenObjectByPointer(process, 0, NULL, PROCESS_ALL_ACCESS, NULL, KernelMode, &h)))
++    {
++        WARN("Error opening process object, status %#lx.\n", status);
++        return status;
++    }
++
++    status = NtQueryInformationProcess(h, ProcessImageFileName, NULL, 0, &len);
++    if (status != STATUS_INFO_LENGTH_MISMATCH)
++    {
++        NtClose(h);
++        return status;
++    }
++
++    len += sizeof(WCHAR) + sizeof(UNICODE_STRING);
++
++    if (!(*image_name = ExAllocatePool(PagedPool, len)))
++    {
++        NtClose(h);
++        return STATUS_NO_MEMORY;
++    }
++
++    if ((status = NtQueryInformationProcess(h, ProcessImageFileName,
++                                            *image_name, len - sizeof(WCHAR), &len)))
++    {
++        ExFreePool(*image_name);
++        *image_name = NULL;
++        NtClose(h);
++        return status;
++    }
++
++    NtClose(h);
++    return STATUS_SUCCESS;
+ }
+ 
+ /*********************************************************************
+diff --git a/include/ddk/ntifs.h b/include/ddk/ntifs.h
+index e49ae257a0e..ce201d02a4d 100644
+--- a/include/ddk/ntifs.h
++++ b/include/ddk/ntifs.h
+@@ -218,5 +218,6 @@ NTSTATUS WINAPI PsLookupThreadByThreadId(HANDLE,PETHREAD*);
+ PACCESS_TOKEN WINAPI PsReferencePrimaryToken(PEPROCESS);
+ void WINAPI PsRevertToSelf(void);
+ char WINAPI RtlQueryProcessPlaceholderCompatibilityMode(void);
++NTSTATUS WINAPI SeLocateProcessImageName(PEPROCESS,UNICODE_STRING**);
+ 
+ #endif
