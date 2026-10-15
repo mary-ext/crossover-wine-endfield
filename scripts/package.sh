@@ -11,6 +11,7 @@ DIST_DIR="${DIST_DIR:-$REPO/dist}"
 WINE_OUT="$BUILD_DIR/wine-out"
 MVK_OUT="$BUILD_DIR/moltenvk-out"
 PKG_NAME="endfield-wine-modules"
+. "$REPO/scripts/modules.sh"
 out="$DIST_DIR/$PKG_NAME"
 
 log(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
@@ -21,7 +22,7 @@ log "Packaging into $out.tar.gz"
 [ -f "$MVK_OUT/SOURCE_URL" ] || die "no $MVK_OUT; run scripts/build-moltenvk.sh"
 
 rm -rf "$out" "$out.tar.gz" "$out.tar.gz.sha256"; mkdir -p "$out"
-cp "$WINE_OUT"/{ntdll.so,kernel32.dll,ntoskrnl.exe,wineserver,COPYING.LIB,CROSSOVER_VERSION} "$out/"
+for f in "${WINE_MODULE_NAMES[@]}" COPYING.LIB CROSSOVER_VERSION; do cp "$WINE_OUT/$f" "$out/"; done
 cp "$MVK_OUT"/{libMoltenVK.dylib,LICENSE.MoltenVK} "$out/"
 # cxcompatdb.so needs ntdll's LC_RPATH to resolve @rpath/libgnutls and enable D3DMetal.
 # Add CrossOver's library path here so installation needs no developer tools.
@@ -40,7 +41,7 @@ libMoltenVK.dylib: Apache-2.0 (see LICENSE.MoltenVK).
   patches and build script: $repo_url
   commit:                   $commit
 EOF
-( cd "$out" && shasum -a 256 ntdll.so kernel32.dll ntoskrnl.exe wineserver libMoltenVK.dylib > SHA256SUMS && cat SHA256SUMS )
+( cd "$out" && shasum -a 256 "${MODULE_NAMES[@]}" > SHA256SUMS && cat SHA256SUMS )
 COPYFILE_DISABLE=1 tar -czf "$out.tar.gz" -C "$DIST_DIR" "$PKG_NAME"
 ( cd "$DIST_DIR" && shasum -a 256 "$PKG_NAME.tar.gz" > "$PKG_NAME.tar.gz.sha256" )
 echo "packaged: $out.tar.gz"

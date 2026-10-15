@@ -23,15 +23,9 @@ ok(){   printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 die(){  printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# Package files and their destinations in the supported CrossOver layout.
-components=(ntdll.so kernel32.dll ntoskrnl.exe wineserver libMoltenVK.dylib)
-paths=(
-  lib/wine/x86_64-unix/ntdll.so
-  lib/wine/x86_64-windows/kernel32.dll
-  lib/wine/x86_64-windows/ntoskrnl.exe
-  "CrossOver-Hosted Application/wineserver"
-  lib64/libMoltenVK.dylib
-)
+. "$REPO/scripts/modules.sh"
+components=("${MODULE_NAMES[@]}")
+paths=("${MODULE_INSTALL_PATHS[@]}")
 
 check_inputs() {
   local f built app_ver

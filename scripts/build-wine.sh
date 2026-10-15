@@ -8,7 +8,7 @@
 #   scripts/build-wine.sh <step>   # deps | fetch | apply | configure | build
 #
 # Env: CX_VER (default 26.3.0), BUILD_DIR (default <repo>/build),
-#      JOBS (default: all cores), FULL=1 (build the whole Wine tree instead of the three modules)
+#      JOBS (default: all cores), FULL=1 (build the full Wine tree)
 
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,7 +19,8 @@ SRC_URL="https://media.codeweavers.com/pub/crossover/source/crossover-sources-${
 WINE_SRC="$BUILD_DIR/wine-src"          # extracted sources/wine
 WINE_BUILD="$BUILD_DIR/wine-build64"    # out-of-tree 64-bit build
 WINE_OUT="$BUILD_DIR/wine-out"
-MODULES="dlls/ntdll/ntdll.so dlls/kernel32/x86_64-windows/kernel32.dll dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe server/wineserver"
+. "$REPO/scripts/modules.sh"
+MODULES="${WINE_BUILD_PATHS[*]}"
 BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
 export MACOSX_DEPLOYMENT_TARGET=10.15
 
