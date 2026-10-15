@@ -49,7 +49,7 @@ See the [patch reference](patches/README.md) for application order, individual f
 
 ## License
 
-- `scripts/` and this README: [MIT](LICENSE).
+- `scripts/`, `tools/` and this README: [MIT](LICENSE).
 - Wine patches (`patches/wine/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license.
 - MoltenVK patches (`patches/moltenvk/`) and the built library: Apache-2.0, MoltenVK's license.
 
