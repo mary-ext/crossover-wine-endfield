@@ -29,8 +29,6 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
 - `0007`, `0008`:
   - Defers unmapping section views while a locked MDL maps them; calls `PsGetContextThread` through a thunk.
 
-The `_dw` `PsGetProcessExitStatus` stub (`d077b3f5c3`) is replaced by `macos/0005`; the csrss/lsass changes are adapted in `macos/0007`.
-
 ### additional macOS patches (`wine/macos/`)
 
 - `0000-build-fix-win32u-vulkan-soname-fallback.patch`:
