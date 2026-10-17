@@ -37,9 +37,10 @@ cmd_fetch() {
   mkdir -p "$BUILD_DIR"
   local tgz="$BUILD_DIR/crossover-sources-${CX_VER}.tar.gz"
   [ -f "$tgz" ] || curl -fL "$SRC_URL" -o "$tgz" || { echo "download failed ($SRC_URL)"; exit 1; }
-  rm -rf "$WINE_SRC" "$BUILD_DIR/sources"; mkdir -p "$WINE_SRC"
+  rm -rf "$WINE_SRC" "$BUILD_DIR/sources"
   tar xzf "$tgz" -C "$BUILD_DIR" sources/wine || { echo "extract failed"; exit 1; }
-  mv "$BUILD_DIR/sources/wine"/* "$WINE_SRC/"; rm -rf "$BUILD_DIR/sources"
+  # Preserve Wine's dotfiles.
+  mv "$BUILD_DIR/sources/wine" "$WINE_SRC"; rm -rf "$BUILD_DIR/sources"
   # Commit a baseline for inspecting patch changes.
   ( cd "$WINE_SRC" && git init -q && git add -A && git -c user.email=build@localhost -c user.name=build commit -qm "vanilla CrossOver ${CX_VER} wine" ) || exit 1
   echo "Wine source: $WINE_SRC ($(cat "$WINE_SRC/VERSION"))"
