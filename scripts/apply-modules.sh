@@ -67,9 +67,11 @@ install_components() {
 }
 
 sign_components() {
+  local p
   log "Signing patched Mach-O components"
-  codesign --force --sign - "$CXR/lib/wine/x86_64-unix/ntdll.so"
-  codesign --force --sign - "$CXR/lib64/libMoltenVK.dylib"
+  for p in "${paths[@]}"; do
+    case "$p" in *.so|*.dylib) codesign --force --sign - "$CXR/$p" ;; esac
+  done
   codesign --force --sign - --options runtime --entitlements "$ents" \
     "$CXR/CrossOver-Hosted Application/wineserver"
 }

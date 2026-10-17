@@ -24,9 +24,13 @@ log "Packaging into $out.tar.gz"
 rm -rf "$out" "$out.tar.gz" "$out.tar.gz.sha256"; mkdir -p "$out"
 for f in "${WINE_MODULE_NAMES[@]}" COPYING.LIB CROSSOVER_VERSION; do cp "$WINE_OUT/$f" "$out/"; done
 cp "$MVK_OUT"/{libMoltenVK.dylib,LICENSE.MoltenVK} "$out/"
+# Set CrossOver's library search path before packaging so installation needs no developer tools.
 # cxcompatdb.so needs ntdll's LC_RPATH to resolve @rpath/libgnutls and enable D3DMetal.
-# Add CrossOver's library path here so installation needs no developer tools.
-install_name_tool -add_rpath "@loader_path/../../../lib64" "$out/ntdll.so"
+for i in "${!MODULE_INSTALL_PATHS[@]}"; do
+  case "${MODULE_INSTALL_PATHS[$i]}" in
+    lib/wine/x86_64-unix/*.so) install_name_tool -add_rpath "@loader_path/../../../lib64" "$out/${MODULE_NAMES[$i]}" ;;
+  esac
+done
 
 if [ -n "${GITHUB_REPOSITORY:-}" ]; then repo_url="${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY"
 else repo_url="$(git -C "$REPO" config --get remote.origin.url || echo unknown)"; fi
