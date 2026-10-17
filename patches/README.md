@@ -53,6 +53,10 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Avoids an unused clock read for infinite waits and existing absolute deadlines; wait and wake behavior is unchanged.
 - `0007-lsass-add-a-stub-started-by-wineboot.patch`:
   - Starts an `lsass.exe` stub with services so ACE-CORE can initialize.
+- `0008-msync-fix-waitall-rollback.patch`:
+  - Wakes sleepers after wait-all rollback and preserves prior mutex ownership and abandonment state.
+- `0009-msync-don-t-spin-on-abandoned-mutexes-in-wait-all.patch`:
+  - Prevents wait-all from spinning indefinitely on abandoned mutexes.
 
 ## MoltenVK
 

@@ -1,0 +1,17 @@
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -1035,11 +1035,13 @@ tryagain:
+                 if (((struct mutex *)objs_shm[i])->msync_type == MSYNC_MUTEX)
+                 {
+                     struct mutex *mutex = (struct mutex *)objs_shm[i];
++                    int tid;
+ 
+                     if (mutex->tid == current_tid)
+                         continue;
+ 
+-                    while (__atomic_load_n( &mutex->tid, __ATOMIC_SEQ_CST ))
++                    /* Abandoned mutexes (~0) are available to acquire. */
++                    while ((tid = __atomic_load_n( &mutex->tid, __ATOMIC_SEQ_CST )) && tid != ~0)
+                     {
+                         status = do_single_wait( objs[i], objs_shm[i], alert_obj, alert_obj_shm, timeout ? &end : NULL, current_tid );
+                         if (status != STATUS_PENDING)
