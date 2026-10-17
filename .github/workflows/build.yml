@@ -9,6 +9,7 @@ on:
       - "scripts/build-wine.sh"
       - "scripts/build-moltenvk.sh"
       - "scripts/package.sh"
+      - "scripts/modules.sh"
       - ".github/workflows/build.yml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "scripts/build-wine.sh"
       - "scripts/build-moltenvk.sh"
       - "scripts/package.sh"
+      - "scripts/modules.sh"
       - ".github/workflows/build.yml"
   workflow_dispatch:
     inputs:
@@ -49,7 +51,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/wine-out
-          key: wine-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-cx${{ env.CX_VER }}-${{ hashFiles('patches/wine/**', 'scripts/build-wine.sh', '.github/workflows/build.yml') }}
+          key: wine-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-cx${{ env.CX_VER }}-${{ hashFiles('patches/wine/**', 'scripts/build-wine.sh', 'scripts/modules.sh', '.github/workflows/build.yml') }}
 
       - name: Install Rosetta 2
         if: steps.cache.outputs.cache-hit != 'true'
