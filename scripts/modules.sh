@@ -2,6 +2,7 @@
 # Empty build paths are non-Wine modules; output and package filenames are install basenames.
 MODULE_TABLE='
 dlls/ntdll/ntdll.so|lib/wine/x86_64-unix/ntdll.so
+dlls/winemac.drv/winemac.so|lib/wine/x86_64-unix/winemac.so
 dlls/kernel32/x86_64-windows/kernel32.dll|lib/wine/x86_64-windows/kernel32.dll
 dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe|lib/wine/x86_64-windows/ntoskrnl.exe
 programs/lsass/x86_64-windows/lsass.exe|lib/wine/x86_64-windows/lsass.exe

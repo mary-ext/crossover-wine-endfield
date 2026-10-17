@@ -64,6 +64,8 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Fixes an off-by-one that left object 0 registered when object 1 was already signaled.
 - `0012-ntdll-replace-stale-ntdll-symlink-in-winetemp-dir.patch`:
   - Refreshes the `winetemp/ntdll.so` symlink so CrossOver can launch after being moved or renamed.
+- `0013-winemac-cache-the-window-under-the-cursor.patch`:
+  - Caches the window under a stationary cursor for 50 ms to reduce WindowServer queries during mouse-look.
 
 ## MoltenVK
 

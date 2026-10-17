@@ -1,0 +1,29 @@
+--- a/dlls/winemac.drv/cocoa_app.m
++++ b/dlls/winemac.drv/cocoa_app.m
+@@ -1461,9 +1461,23 @@ - (void) handleMouseMove:(NSEvent*)anEvent
+             CGPoint cgpoint = CGEventGetLocation([anEvent CGEvent]);
+             NSPoint point = [self flippedMouseLocation:NSPointFromCGPoint(cgpoint)];
+             NSInteger windowUnderNumber;
+-
+-            windowUnderNumber = [NSWindow windowNumberAtPoint:point
+-                                  belowWindowWithWindowNumber:0];
++            /* Avoid repeated synchronous WindowServer queries while the cursor is pinned.
++               Cache accessed only on the main thread. */
++            static NSPoint cachedPoint;
++            static NSInteger cachedWindowNumber;
++            static NSTimeInterval cachedTime;
++            NSTimeInterval now = [anEvent timestamp];
++
++            if (NSEqualPoints(point, cachedPoint) && now - cachedTime < 0.05 && now >= cachedTime)
++                windowUnderNumber = cachedWindowNumber;
++            else
++            {
++                windowUnderNumber = [NSWindow windowNumberAtPoint:point
++                                      belowWindowWithWindowNumber:0];
++                cachedPoint = point;
++                cachedWindowNumber = windowUnderNumber;
++                cachedTime = now;
++            }
+             targetWindow = (WineWindow*)[NSApp windowWithWindowNumber:windowUnderNumber];
+             if (!NSMouseInRect(point, [targetWindow contentRectForFrameRect:[targetWindow frame]], NO))
+                 targetWindow = nil;
