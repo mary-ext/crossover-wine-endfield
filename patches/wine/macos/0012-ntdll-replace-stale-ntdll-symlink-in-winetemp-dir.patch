@@ -1,0 +1,25 @@
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -568,7 +568,7 @@ static char *extract_exe_name(const char *exe_path)
+  */
+ static char *create_tempdir(const char *wineloader_path)
+ {
+-    char *str, *ntdll, *p, *tempdir = malloc(MAX_PATH);
++    char *str, *tmp, *ntdll, *p, *tempdir = malloc(MAX_PATH);
+     struct stat st;
+     size_t n;
+ 
+@@ -594,7 +594,12 @@ static char *create_tempdir(const char *wineloader_path)
+     if ((p = strrchr( ntdll, '/' ))) *p = 0;
+     strcat( ntdll, "/ntdll.so" );
+     asprintf( &str, "%s/ntdll.so", tempdir );
+-    symlink( ntdll, str );
++    /* Moving the app preserves tempdir but invalidates the link target.
++       Replace the link atomically for concurrent launches. */
++    asprintf( &tmp, "%s/ntdll.so.%d", tempdir, (int)getpid() );
++    unlink( tmp );
++    if (!symlink( ntdll, tmp ) && rename( tmp, str )) unlink( tmp );
++    free( tmp );
+     free( str );
+     free( ntdll);
+     return tempdir;

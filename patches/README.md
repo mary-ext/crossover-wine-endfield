@@ -62,6 +62,8 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Prints the pool-exhausted warning once.
 - `0011-msync-server-unregister-object-0-when-object-1-is-signaled.patch`:
   - Fixes an off-by-one that left object 0 registered when object 1 was already signaled.
+- `0012-ntdll-replace-stale-ntdll-symlink-in-winetemp-dir.patch`:
+  - Refreshes the `winetemp/ntdll.so` symlink so CrossOver can launch after being moved or renamed.
 
 ## MoltenVK
 
