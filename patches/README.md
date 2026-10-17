@@ -52,7 +52,7 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Reads the system clock only when converting a relative timeout to an absolute deadline.
   - Avoids an unused clock read for infinite waits and existing absolute deadlines; wait and wake behavior is unchanged.
 - `0007-lsass-add-a-stub-started-by-wineboot.patch`:
-  - Starts an `lsass.exe` stub with services so ACE-CORE can initialize. Source commits and adaptation details are in the patch header.
+  - Starts an `lsass.exe` stub with services so ACE-CORE can initialize.
 
 ## MoltenVK
 
