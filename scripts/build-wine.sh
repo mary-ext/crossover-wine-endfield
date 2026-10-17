@@ -67,7 +67,9 @@ cmd_configure() {
   use_bison
   # Matching build/host lets configure run x86_64 probes under Rosetta while shell tools
   # stay native. Disable optional libraries: Homebrew's are arm64, and these modules don't need them.
+  # ntdll calls pipe2 unchecked; its weak symbol is NULL before macOS 27.
   ( cd "$WINE_BUILD" && CC="clang -arch x86_64" CXX="clang++ -arch x86_64" OBJC="clang -arch x86_64" "$WINE_SRC/configure" \
+      ac_cv_func_pipe2=no \
       --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-archs=x86_64 \
       --disable-tests --without-x --without-freetype --without-gnutls --without-sdl --without-vulkan \
       --without-krb5 --without-gstreamer --without-gphoto --without-sane --without-pcap --without-usb \
