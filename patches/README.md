@@ -57,6 +57,11 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Wakes sleepers after wait-all rollback and preserves prior mutex ownership and abandonment state.
 - `0009-msync-don-t-spin-on-abandoned-mutexes-in-wait-all.patch`:
   - Prevents wait-all from spinning indefinitely on abandoned mutexes.
+- `0010-msync-server-keep-one-waiter-node-per-thread.patch`:
+  - Deduplicates waiter registrations to prevent unbounded wineserver memory growth.
+  - Prints the pool-exhausted warning once.
+- `0011-msync-server-unregister-object-0-when-object-1-is-signaled.patch`:
+  - Fixes an off-by-one that left object 0 registered when object 1 was already signaled.
 
 ## MoltenVK
 

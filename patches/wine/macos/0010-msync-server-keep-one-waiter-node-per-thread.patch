@@ -1,0 +1,33 @@
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -177,7 +177,13 @@ static inline struct tid_node *pool_alloc(void)
+ {
+     if (pool->count == 0)
+     {
+-        fprintf( stderr, "msync: warn: node memory pool exhausted\n" );
++        static int warned;
++
++        if (!warned)
++        {
++            warned = 1;
++            fprintf( stderr, "msync: warn: node memory pool exhausted\n" );
++        }
+         return malloc( sizeof(struct tid_node) );
+     }
+     return pool->free_nodes[--pool->count];
+@@ -227,9 +233,14 @@ static inline struct tid_list *get_tid_list( unsigned int shm_idx )
+ 
+ static inline void add_tid( unsigned int shm_idx, int tid )
+ {
+-    struct tid_node *new_node;
++    struct tid_node *new_node, *node;
+     struct tid_list *list = get_tid_list( shm_idx );
+ 
++    /* Early returns can leave registrations until the object is signaled.
++     * Reuse the existing node; one per thread suffices to wake it. */
++    for (node = list->head; node; node = node->next)
++        if (node->tid == tid) return;
++
+     new_node = pool_alloc();
+     new_node->tid = tid;
+ 
