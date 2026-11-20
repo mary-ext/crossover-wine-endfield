@@ -1,8 +1,8 @@
 diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
-index 91926a8..e6f434e 100644
+index 91926a8..32dc3f8 100644
 --- a/dlls/ntdll/unix/signal_x86_64.c
 +++ b/dlls/ntdll/unix/signal_x86_64.c
-@@ -1990,6 +1990,30 @@ static inline BOOL handle_cet_nop( ucontext_t *sigcontext, CONTEXT *context )
+@@ -1990,6 +1990,32 @@ static inline BOOL handle_cet_nop( ucontext_t *sigcontext, CONTEXT *context )
              RIP_sig(sigcontext) += prefix_count + 3;
              TRACE_(seh)( "skipped RDSSPD/RDSSPQ instruction\n" );
              return TRUE;
@@ -11,8 +11,9 @@ index 91926a8..e6f434e 100644
 +               0F 1F C1 (nop ecx) in Endfield's TenProtect/VMProtect layer.
 +               Decode the instruction length and skip it. */
 +        {
-+            unsigned int p = i + 2;                 /* index of the modrm byte */
++            unsigned int p = i + 2, j;              /* index of the modrm byte */
 +            BYTE modrm; unsigned int mod, rm;
++            for (j = 0; j < i; j++) if (instr[j] == 0xf0) return FALSE;  /* LOCK: #UD on hardware too */
 +            if (p >= len) return FALSE;
 +            modrm = instr[p++];
 +            mod = modrm >> 6; rm = modrm & 7;
@@ -26,6 +27,7 @@ index 91926a8..e6f434e 100644
 +            if (mod == 1) p += 1;                   /* disp8 */
 +            else if (mod == 2) p += 4;              /* disp32 */
 +            else if (mod == 0 && rm == 5) p += 4;   /* rip-relative disp32 (no SIB) */
++            if (p > len || p > 15) return FALSE;    /* truncated read or over 15 bytes */
 +            RIP_sig(sigcontext) += p;               /* p = full instruction length incl. prefixes */
 +            TRACE_(seh)( "skipped multi-byte NOP (0F 1F)\n" );
 +            return TRUE;
@@ -33,7 +35,7 @@ index 91926a8..e6f434e 100644
          }
          break;
      default:
-@@ -2518,6 +2542,19 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+@@ -2518,6 +2544,19 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
          if (handle_cet_nop( ucontext, &context.c )) return;
          /* CW HACK 23427 */
          if (emulate_xgetbv( ucontext, &context.c )) return;

@@ -35,6 +35,8 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Defines `SONAME_LIBVULKAN` for builds without Vulkan.
 - `0001-macos-rosetta-signal-fixes-nop-and-privinstr.patch`:
   - Skips `0F 1F` multi-byte NOPs in the game's protector that Rosetta 2 reports as illegal instructions.
+    - Lets the NOP fault when it has a LOCK prefix (hardware raises #UD there too), was read only partly, or exceeds 15 bytes.
+    - Accepts `/1`–`/7` encodings as well as `/0`, since hardware executes them as NOPs.
   - Delivers `EXCEPTION_PRIV_INSTRUCTION` for privileged instructions such as `mov reg, cr3`, which Rosetta reports as invalid opcodes.
 - `0002-ntdll-bound-select-timeouts-in-NtDelayExecution.patch`:
   - Caps `select()` waits at one day to avoid busy-looping on Darwin's `EINVAL` for timeouts over 10^8 seconds.
