@@ -1,0 +1,67 @@
+--- a/dlls/winemac.drv/cocoa_app.h
++++ b/dlls/winemac.drv/cocoa_app.h
+@@ -95,6 +95,7 @@
+     BOOL terminatingDueToExternalRequest;
+ 
+     BOOL beenActive;
++    NSString* activationDisplayState;
+ 
+     NSMutableSet* windowsBeingDragged;
+ 
+--- a/dlls/winemac.drv/cocoa_app.m
++++ b/dlls/winemac.drv/cocoa_app.m
+@@ -218,6 +218,7 @@
+         [cursor release];
+         [screenFrameCGRects release];
+         [applicationIcon release];
++        [activationDisplayState release];
+         [clipCursorHandler release];
+         [cursorTimer release];
+         [cursorFrames release];
+@@ -848,12 +849,46 @@
+         [self updateFullscreenWindows];
+         [self adjustWindowLevels];
+     }
++
++    - (NSString*) currentDisplayState
++    {
++        CGDirectDisplayID displays[32];
++        uint32_t count = 0, i;
++        NSMutableString* state = [NSMutableString string];
+ 
++        if (CGGetOnlineDisplayList(sizeof(displays) / sizeof(displays[0]), displays, &count) != kCGErrorSuccess)
++            return nil;
++        for (i = 0; i < count; i++)
++        {
++            CGRect bounds = CGDisplayBounds(displays[i]);
++            CGDisplayModeRef mode = CGDisplayCopyDisplayMode(displays[i]);
++            [state appendFormat:@"%u:%d,%d,%u,%g,%g,%g,%g,%zu,%zu,%g,%u;", (unsigned int)displays[i],
++                   (int)CGDisplayIsActive(displays[i]), (int)CGDisplayIsMain(displays[i]),
++                   (unsigned int)CGDisplayMirrorsDisplay(displays[i]),
++                   bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height,
++                   mode ? CGDisplayModeGetPixelWidth(mode) : 0, mode ? CGDisplayModeGetPixelHeight(mode) : 0,
++                   mode ? CGDisplayModeGetRefreshRate(mode) : 0.0, mode ? (unsigned int)CGDisplayModeGetIOFlags(mode) : 0];
++            if (mode) CGDisplayModeRelease(mode);
++        }
++        return state;
++    }
++
+     - (void) sendDisplaysChanged:(BOOL)activating
+     {
+         macdrv_event* event;
+         WineEventQueue* queue;
+ 
++        /* Skip the costly activation resync when the displays match the last one. Only
++           activation records the state: non-desktop processes ignore the other events. */
++        if (activating)
++        {
++            NSString* state = [self currentDisplayState];
++            if (activationDisplayState && [state isEqualToString:activationDisplayState])
++                return;
++            [activationDisplayState release];
++            activationDisplayState = [state copy];
++        }
++
+         event = macdrv_create_event(DISPLAYS_CHANGED, nil);
+         event->displays_changed.activating = activating;
+ 

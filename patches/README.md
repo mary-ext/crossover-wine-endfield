@@ -68,6 +68,9 @@ Applied to CrossOver's Wine 11.0 source, in the following order:
   - Refreshes the `winetemp/ntdll.so` symlink so CrossOver can launch after being moved or renamed.
 - `0013-winemac-cache-the-window-under-the-cursor.patch`:
   - Caches the window under a stationary cursor for 50 ms to reduce WindowServer queries during mouse-look.
+- `0014-winemac-skip-the-activation-display-resync-when-nothing-changed.patch`:
+  - Skips the `DISPLAYS_CHANGED` event winemac sends on activation when the online displays, bounds and modes match the last activation resync. win32u answers that event by re-reading every display, mode, EDID and GPU and rewriting the display registry keys on the message thread, which hitches each switch back to a game.
+  - Records the state only on activation: a process that doesn't own the desktop window ignores the other display events, so a change seen only through them still triggers a resync at the next activation.
 
 ## MoltenVK
 
