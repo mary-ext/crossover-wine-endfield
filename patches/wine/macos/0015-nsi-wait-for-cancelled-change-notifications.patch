@@ -1,0 +1,30 @@
+diff --git a/dlls/nsi/nsi.c b/dlls/nsi/nsi.c
+index 14be842..9d30801 100644
+--- a/dlls/nsi/nsi.c
++++ b/dlls/nsi/nsi.c
+@@ -118,15 +118,21 @@ err:
+ 
+ DWORD WINAPI NsiCancelChangeNotification( OVERLAPPED *ovr )
+ {
+-    DWORD err = ERROR_SUCCESS;
++    HANDLE device = get_nsi_device( TRUE );
++    DWORD len;
+ 
+     TRACE( "%p.\n", ovr );
+ 
+     if (!ovr) return ERROR_NOT_FOUND;
+-    if (!CancelIoEx(  get_nsi_device( TRUE ), ovr ))
+-        err = GetLastError();
++    if (!CancelIoEx( device, ovr ))
++        return GetLastError();
+ 
+-    return err;
++    /* As on Windows, the request has completed when this returns; callers free the OVERLAPPED. */
++    if (ovr->Internal == STATUS_PENDING && !GetOverlappedResultEx( device, ovr, &len, 5000, FALSE )
++        && GetLastError() == WAIT_TIMEOUT)
++        WARN( "cancelled request %p did not complete.\n", ovr );
++
++    return ERROR_SUCCESS;
+ }
+ 
+ DWORD WINAPI NsiEnumerateObjectsAllParameters( DWORD unk, DWORD unk2, const NPI_MODULEID *module, DWORD table,

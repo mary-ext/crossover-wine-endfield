@@ -1,0 +1,40 @@
+diff --git a/dlls/kernel32/module.c b/dlls/kernel32/module.c
+index 22886c5..7739762 100644
+--- a/dlls/kernel32/module.c
++++ b/dlls/kernel32/module.c
+@@ -291,6 +291,25 @@ static BOOL needs_int3_hack(void)
+     return cache;
+ }
+ 
++#ifdef __arm64ec__
++/* kernel32's own pages are ARM64EC code, so the x64 caller needs int3s in x64 memory. */
++static INIT_ONCE int3_once = INIT_ONCE_STATIC_INIT;
++static void *int3_code;
++static BOOL CALLBACK init_int3_code(INIT_ONCE *once, void *param, void **ctx)
++{
++    DWORD old;
++    /* Dynamically allocated executable memory is x64 code in an EC process. */
++    void *code = VirtualAlloc(NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
++    if (!code) return FALSE;
++    memset(code, 0xcc, 4096);
++    if (!VirtualProtect(code, 4096, PAGE_EXECUTE_READ, &old))
++    { VirtualFree(code, 0, MEM_RELEASE); return FALSE; }
++    FlushInstructionCache(GetCurrentProcess(), code, 4096);
++    int3_code = code;
++    return TRUE;
++}
++#endif
++
+ static void __attribute__((naked)) int3_stub( void )
+ {
+     asm(".byte 0xCC, 0xCC, 0xCC, 0xCC\n\t");
+@@ -322,6 +341,9 @@ FARPROC get_proc_address( HMODULE hModule, LPCSTR function )
+         if (needs_int3_hack() && (strcmp( function, "KiUserApcDispatcher" ) == 0 || strcmp( function, "KiUserCallbackDispatcher" ) == 0))
+         {
+             FIXME( "HACK: returning int3 stub instead of %s\n", function );
++#ifdef __arm64ec__
++            if (InitOnceExecuteOnce(&int3_once, init_int3_code, NULL, NULL)) return (FARPROC)int3_code;
++#endif
+             return (FARPROC)&int3_stub;
+         }
+ 

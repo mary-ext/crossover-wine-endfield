@@ -4,6 +4,7 @@ MODULE_TABLE='
 dlls/ntdll/ntdll.so|lib/wine/x86_64-unix/ntdll.so
 dlls/winemac.drv/winemac.so|lib/wine/x86_64-unix/winemac.so
 dlls/kernel32/x86_64-windows/kernel32.dll|lib/wine/x86_64-windows/kernel32.dll
+dlls/nsi/x86_64-windows/nsi.dll|lib/wine/x86_64-windows/nsi.dll
 dlls/ntoskrnl.exe/x86_64-windows/ntoskrnl.exe|lib/wine/x86_64-windows/ntoskrnl.exe
 programs/lsass/x86_64-windows/lsass.exe|lib/wine/x86_64-windows/lsass.exe
 programs/wineboot/x86_64-windows/wineboot.exe|lib/wine/x86_64-windows/wineboot.exe

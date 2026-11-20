@@ -31,6 +31,10 @@ Pass a step name to run only that step:
 - `./scripts/build-moltenvk.sh <step>`: `fetch`, `apply`, `deps`, `build`
   - `MVK_TAG=<tag>`: selects the MoltenVK release.
 
+## Experimental ARM64 / FEX preview
+
+The [FEX preview port](experiments/fex/README.md) builds patched ARM64 Wine and sets up a separate CrossOver Preview app and bottle. See its README for requirements, performance results and known issues.
+
 ## After installing
 
 - If macOS blocks the first launch, open **System Settings → Privacy & Security → Open Anyway**.
@@ -49,8 +53,8 @@ See the [patch reference](patches/README.md) for application order, individual f
 
 ## License
 
-- `scripts/`, `tools/` and this README: [MIT](LICENSE).
-- Wine patches (`patches/wine/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license.
+- `scripts/`, `tools/`, `experiments/` and this README: [MIT](LICENSE).
+- Wine patches (`patches/wine/` and `patches/wine-preview/`) and the built Wine modules: LGPL-2.1-or-later, Wine's license.
 - MoltenVK patches (`patches/moltenvk/`) and the built library: Apache-2.0, MoltenVK's license.
 
 ## Disclaimer

@@ -1,0 +1,64 @@
+diff --git a/dlls/ntdll/signal_arm64ec.c b/dlls/ntdll/signal_arm64ec.c
+index 45b2426..657b83b 100644
+--- a/dlls/ntdll/signal_arm64ec.c
++++ b/dlls/ntdll/signal_arm64ec.c
+@@ -1395,6 +1395,7 @@ BOOLEAN WINAPI RtlIsEcCode( ULONG_PTR ptr )
+ {
+     const UINT64 *map = (const UINT64 *)NtCurrentTeb()->Peb->EcCodeBitMap;
+     ULONG_PTR page = ptr / page_size;
++    if (ptr >= 0x800000000000ull) return FALSE;
+     return (map[page / 64] >> (page & 63)) & 1;
+ }
+ 
+@@ -1843,23 +1844,39 @@ ULONG WINAPI RtlWalkFrameChain( void **buffer, ULONG count, ULONG flags )
+     ULONG_PTR pc, frame, base;
+     CONTEXT context;
+     void *data;
+-    ULONG i, skip = flags >> 8, num_entries = 0;
++    ULONG i, skip = flags >> 8;
++    volatile ULONG num_entries = 0;
++    ULONG_PTR prev_sp;
+ 
+     RtlCaptureContext( &context );
+ 
+-    for (i = 0; i < count; i++)
++    /* a fault here would be dispatched through the same broken stack */
++    __TRY
+     {
+-        pc = context.Rip;
+-        if ((context.ContextFlags & CONTEXT_UNWOUND_TO_CALL) && RtlIsEcCode( pc )) pc -= 4;
+-        func = RtlLookupFunctionEntry( pc, &base, &table );
+-        if (RtlVirtualUnwind2( UNW_FLAG_NHANDLER, base, pc, func, &context, NULL,
+-                               &data, &frame, NULL, NULL, NULL, &handler, 0 ))
+-            break;
+-        if (!context.Rip) break;
+-        if (!frame || !is_valid_frame( frame )) break;
+-        if (context.Rsp == (ULONG_PTR)NtCurrentTeb()->Tib.StackBase) break;
+-        if (i >= skip) buffer[num_entries++] = (void *)context.Rip;
++        for (i = 0; i < count; i++)
++        {
++            pc = context.Rip;
++            prev_sp = context.Rsp;
++            if ((context.ContextFlags & CONTEXT_UNWOUND_TO_CALL) && RtlIsEcCode( pc )) pc -= 4;
++            func = RtlLookupFunctionEntry( pc, &base, &table );
++            /* as on x86_64; the leaf rule would follow stale stack words */
++            if (!func) break;
++            if (RtlVirtualUnwind2( UNW_FLAG_NHANDLER, base, pc, func, &context, NULL,
++                                   &data, &frame, NULL, NULL, NULL, &handler, 0 ))
++                break;
++            if (!context.Rip) break;
++            if (!frame || !is_valid_frame( frame )) break;
++            /* each caller's frame lies above its callee's, inside this thread's stack */
++            if (context.Rsp <= prev_sp || !is_valid_frame( context.Rsp )) break;
++            if (context.Rsp == (ULONG_PTR)NtCurrentTeb()->Tib.StackBase) break;
++            if (i >= skip) buffer[num_entries++] = (void *)context.Rip;
++        }
++    }
++    __EXCEPT_PAGE_FAULT
++    {
++        TRACE( "fault after %lu frames\n", num_entries );
+     }
++    __ENDTRY
+     return num_entries;
+ }
+ 

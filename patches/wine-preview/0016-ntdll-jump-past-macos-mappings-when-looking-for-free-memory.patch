@@ -1,0 +1,56 @@
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index e681516..63f207f 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -1275,6 +1275,39 @@ static struct wine_rb_entry *find_view_inside_range( void **base_ptr, void **end
+ }
+ 
+ 
++#ifdef __APPLE__
++/* The first step from start that can succeed: past the host mapping (unknown to Wine's views)
++ * that made start fail, instead of probing it one step at a time with virtual_mutex held. */
++static void *next_unmapped_candidate( void *start, size_t size, ptrdiff_t step )
++{
++    mach_vm_address_t address = (mach_vm_address_t)start, next;
++    mach_vm_size_t region_size = 0;
++    vm_region_basic_info_data_64_t info;
++    mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
++    mach_port_t dummy_object_name = MACH_PORT_NULL;
++    size_t align_mask = (step > 0 ? step : -step) - 1;
++
++    /* the mapping at start, or the first one above it */
++    if (mach_vm_region( mach_task_self(), &address, &region_size, VM_REGION_BASIC_INFO_64,
++                        (vm_region_info_t)&info, &count, &dummy_object_name ) != KERN_SUCCESS ||
++        address >= (mach_vm_address_t)start + size)
++        return (char *)start + step;  /* nothing mapped in the way: the plain step */
++
++    if (step > 0)
++    {
++        next = (address + region_size + align_mask) & ~(mach_vm_address_t)align_mask;
++        if (next <= (mach_vm_address_t)start) return (char *)start + step;
++    }
++    else
++    {
++        if (address < size) return NULL;
++        next = (address - size) & ~(mach_vm_address_t)align_mask;
++        if (next >= (mach_vm_address_t)start) return (char *)start + step;
++    }
++    return (void *)next;
++}
++#endif
++
+ /***********************************************************************
+  *           try_map_free_area
+  *
+@@ -1298,7 +1331,11 @@ static void* try_map_free_area( void *base, void *end, ptrdiff_t step,
+             (step < 0 && (char *)start - (char *)base < -step) ||
+             step == 0)
+             break;
++#ifdef __APPLE__
++        start = next_unmapped_candidate( start, size, step );
++#else
+         start = (char *)start + step;
++#endif
+     }
+ 
+     return NULL;

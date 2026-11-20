@@ -1,0 +1,14 @@
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 9b5d976..e681516 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -590,7 +590,8 @@ static void *anon_mmap_tryfixed( void *start, size_t size, int prot, int flags )
+     }
+     else
+     {
+-        errno = (ret == KERN_NO_SPACE ? EEXIST : ENOMEM);
++        /* the arm64 zero page reaches up to 4 GB; let free-area searches step past it */
++        errno = (ret == KERN_NO_SPACE || ret == KERN_INVALID_ADDRESS) ? EEXIST : ENOMEM;
+         ptr = MAP_FAILED;
+     }
+ #else
